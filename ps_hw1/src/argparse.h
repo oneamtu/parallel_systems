@@ -11,6 +11,7 @@ struct options_t {
     int n_threads;
     int n_loops;
     bool spin;
+    bool debug;
 };
 
 void get_opts(int argc, char **argv, struct options_t *opts);

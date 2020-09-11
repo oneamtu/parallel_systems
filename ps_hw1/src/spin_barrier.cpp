@@ -1,4 +1,4 @@
-#include <spin_barrier.h>
+#include "spin_barrier.h"
 
 
 /************************

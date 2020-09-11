@@ -1,4 +1,4 @@
-#include <argparse.h>
+#include "argparse.h"
 
 void get_opts(int argc,
               char **argv,
@@ -12,6 +12,7 @@ void get_opts(int argc,
         std::cout << "\t--n_threads or -n <num_threads>" << std::endl;
         std::cout << "\t--loops or -l <num_loops>" << std::endl;
         std::cout << "\t[Optional] --spin or -s" << std::endl;
+        std::cout << "\t[Optional] --debug or -d" << std::endl;
         exit(0);
     }
 
@@ -22,7 +23,8 @@ void get_opts(int argc,
         {"out", required_argument, NULL, 'o'},
         {"n_threads", required_argument, NULL, 'n'},
         {"loops", required_argument, NULL, 'l'},
-        {"spin", no_argument, NULL, 's'}
+        {"spin", no_argument, NULL, 's'},
+        {"debug", no_argument, NULL, 'd'}
     };
 
     int ind, c;
@@ -46,6 +48,9 @@ void get_opts(int argc,
             break;
         case 'l':
             opts->n_loops = atoi((char *)optarg);
+            break;
+        case 'd':
+            opts->debug = true;
             break;
         case ':':
             std::cerr << argv[0] << ": option -" << (char)optopt << "requires an argument." << std::endl;
