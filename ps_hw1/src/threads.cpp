@@ -17,7 +17,7 @@ void start_threads(pthread_t *threads,
   }
 
   if (ret) {
-    std::cerr << "Error starting threads" << std::endl;
+    std::cerr << "Error starting threads: " << strerror(ret) << std::endl;
     exit(1);
   }
 }
@@ -31,7 +31,7 @@ void join_threads(pthread_t *threads,
   }
 
   if (res) {
-    std::cerr << "Error joining threads" << std::endl;
+    std::cerr << "Error joining threads: " << strerror(res) << std::endl;
     exit(1);
   }
 }

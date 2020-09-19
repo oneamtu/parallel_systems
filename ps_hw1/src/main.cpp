@@ -1,6 +1,8 @@
 #include <iostream>
 #include "argparse.h"
 #include "threads.h"
+#include "pthread_barrier.h"
+#include "spin_barrier.h"
 #include "io.h"
 #include <chrono>
 #include <cstring>
@@ -33,11 +35,25 @@ int main(int argc, char **argv)
 
     //"op" is the operator you have to use, but you can use "add" to test
     int (*scan_operator)(int, int, int);
-    scan_operator = op;
-    //scan_operator = add;
+    // scan_operator = op;
+    scan_operator = add;
 
-    fill_args(ps_args, opts.n_threads, n_vals, input_vals, output_vals,
-        opts.spin, scan_operator, opts.n_loops);
+    void *barrier;
+
+    if (opts.spin) {
+      // TODO
+      barrier = (void *) alloc_pthread_barrier();
+    }
+    else {
+      barrier = (void *) alloc_pthread_barrier();
+      init_pthread_barrier((pthread_barrier_t *)barrier, opts.n_threads);
+    }
+
+    fill_args(ps_args,
+        input_vals, output_vals,
+        opts.spin, (void *)barrier,
+        opts.n_threads, n_vals,
+        scan_operator, opts.n_loops);
 
     // Start timer
     auto start = std::chrono::high_resolution_clock::now();
@@ -51,7 +67,7 @@ int main(int argc, char **argv)
         }
     }
     else {
-        //start_threads(threads, opts.n_threads, ps_args, <your function>);
+        start_threads(threads, opts.n_threads, ps_args, compute_prefix_sum);
 
         // Wait for threads to finish
         join_threads(threads, opts.n_threads);
@@ -66,6 +82,12 @@ int main(int argc, char **argv)
     write_file(&opts, &(ps_args[0]));
 
     // Free other buffers
+    if (opts.spin) {
+      // TODO
+    }
+    else {
+      free((pthread_barrier_t *)barrier);
+    }
     free(threads);
     free(ps_args);
 }

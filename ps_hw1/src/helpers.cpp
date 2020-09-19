@@ -13,15 +13,16 @@ int next_power_of_two(int x) {
 }
 
 void fill_args(prefix_sum_args_t *args,
-               int n_threads,
-               int n_vals,
                int *inputs,
                int *outputs,
                bool spin,
+               void* barrier,
+               int n_threads,
+               int n_vals,
                int (*op)(int, int, int),
                int n_loops) {
     for (int i = 0; i < n_threads; ++i) {
-        args[i] = {inputs, outputs, spin, n_vals,
+        args[i] = {inputs, outputs, spin, barrier, n_vals,
                    n_threads, i, op, n_loops};
     }
 }

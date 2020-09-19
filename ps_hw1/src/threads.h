@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <iostream>
+#include <cstring>
 #include "prefix_sum.h"
 #include "helpers.h"
 
