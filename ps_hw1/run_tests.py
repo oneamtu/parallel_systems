@@ -3,6 +3,7 @@ import os
 from subprocess import check_output
 import re
 from time import sleep
+import pickle
 
 ALGO_MAP = {
     0: "parallel_block_sequential_sum",
@@ -71,6 +72,8 @@ def run_exp_1():
 
     header = ["algorithm", "input"] + [str(x) for x in THREADS]
 
+    pickle.dump([header] + csvs, open("results/exp_1.pickle", 'wb'))
+    
     exp_1_file = open("results/exp_1.csv", "w")
     exp_1_file.write(", ".join(header))
     exp_1_file.write("\n")
