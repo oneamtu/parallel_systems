@@ -41,7 +41,7 @@ def run_check():
                                 seq_file.name, file.name))
 
 def run_exp_1():
-    THREADS = [2 * i for i in range(0, 16)]
+    THREADS = [2 * i for i in range(0, 17)]
     LOOPS = [10000]
     #  THREADS = [2 * i for i in range(0, 2)]
     #  LOOPS = [1]
@@ -71,11 +71,12 @@ def run_exp_1():
 
     header = ["algorithm", "input"] + [str(x) for x in THREADS]
 
-    print("\n")
-    print(", ".join(header))
+    exp_1_file = open("results/exp_1.csv", "w")
+    exp_1_file.write(", ".join(header))
+    exp_1_file.write("\n")
     for csv in csvs:
-        print (", ".join(csv))
-
+        exp_1_file.write(", ".join(csv))
+        exp_1_file.write("\n")
 
 run_check()
 run_exp_1()

@@ -29,5 +29,10 @@ for name, sz in INPUTS.items():
         f.write("64\n")
         for i in range(64):
             f.write("{}\n".format(i))
+    
+    with open(os.path.join("tests", "seq_63_test.txt"), 'w') as f:
+        f.write("63\n")
+        for i in range(63):
+            f.write("{}\n".format(i))
 
     
