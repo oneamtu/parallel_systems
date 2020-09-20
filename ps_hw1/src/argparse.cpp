@@ -12,11 +12,15 @@ void get_opts(int argc,
         std::cout << "\t--n_threads or -n <num_threads>" << std::endl;
         std::cout << "\t--loops or -l <num_loops>" << std::endl;
         std::cout << "\t[Optional] --spin or -s" << std::endl;
-        std::cout << "\t[Optional] --debug or -d" << std::endl;
+        std::cout << "\t[Optional] --algorithm or -a (defaults to 0 = parallel_block_parallel_sum)" << std::endl;
+        std::cout << "\t\t 0 = parallel_block_sequential_sum" << std::endl;
+        std::cout << "\t\t 1 = parallel_block_parallel_sum" << std::endl;
+        std::cout << "\t\t 2 = parallel_tree_sum" << std::endl;
         exit(0);
     }
 
     opts->spin = false;
+    opts->algorithm = 0;
 
     struct option l_opts[] = {
         {"in", required_argument, NULL, 'i'},
@@ -24,11 +28,11 @@ void get_opts(int argc,
         {"n_threads", required_argument, NULL, 'n'},
         {"loops", required_argument, NULL, 'l'},
         {"spin", no_argument, NULL, 's'},
-        {"debug", no_argument, NULL, 'd'}
+        {"algorithm", required_argument, NULL, 'a'},
     };
 
     int ind, c;
-    while ((c = getopt_long(argc, argv, "i:o:n:p:l:s", l_opts, &ind)) != -1)
+    while ((c = getopt_long(argc, argv, "i:o:n:p:l:sa:", l_opts, &ind)) != -1)
     {
         switch (c)
         {
@@ -49,8 +53,8 @@ void get_opts(int argc,
         case 'l':
             opts->n_loops = atoi((char *)optarg);
             break;
-        case 'd':
-            opts->debug = true;
+        case 'a':
+            opts->algorithm = atoi((char *)optarg);
             break;
         case ':':
             std::cerr << argv[0] << ": option -" << (char)optopt << "requires an argument." << std::endl;

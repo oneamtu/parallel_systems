@@ -33,8 +33,8 @@ int main(int argc, char **argv)
 
   //"op" is the operator you have to use, but you can use "add" to test
   int (*scan_operator)(int, int, int);
-  // scan_operator = op;
-  scan_operator = add;
+  scan_operator = op;
+  // scan_operator = add;
 
   DEBUG("init barrier");
   void *barrier;
@@ -68,7 +68,19 @@ int main(int argc, char **argv)
   }
   else {
     DEBUG("Run threads");
-    start_threads(threads, opts.n_threads, ps_args, compute_prefix_sum);
+
+    switch (opts.algorithm)
+    {
+      case 0:
+        start_threads(threads, opts.n_threads, ps_args, compute_prefix_parallel_block_sequential_sum);
+        break;
+      case 1:
+        start_threads(threads, opts.n_threads, ps_args, compute_prefix_parallel_block_parallel_sum);
+        break;
+      case 2:
+        start_threads(threads, opts.n_threads, ps_args, compute_prefix_parallel_tree_sum);
+        break;
+    }
 
     // Wait for threads to finish
     join_threads(threads, opts.n_threads);
