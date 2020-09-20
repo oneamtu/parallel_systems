@@ -5,6 +5,22 @@
 #include <pthread.h>
 #include "spin_barrier.h"
 
+#define HANDLE(x) \
+  do { \
+    int res = x; \
+    if (res) {\
+      std::cerr << __FILE__ << "Error init-ing spin barrier departure spin: " << strerror(res) << std::endl;\
+      std::cerr << "[" << __FILE__ << "][" << __FUNCTION__ << "][Line " << __LINE__ << "] " << #x << strerror(res) << std::endl;\
+      exit(1);\
+    }\
+  } while (0) \
+
+#if EBUG
+#define DEBUG(x) do { std::cerr << x << std::endl; } while (0)
+#else
+#define DEBUG(x)
+#endif //DEBUG
+
 struct prefix_sum_args_t {
   int*               input_vals;
   int*               output_vals;

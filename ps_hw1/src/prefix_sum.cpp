@@ -3,7 +3,7 @@
 
 void synchronize_on_barrier(prefix_sum_args_t* args) {
   if (args->spin) {
-    // TODO
+    spin_barrier_wait((spin_barrier_t *)args->barrier);
   }
   else {
     pthread_barrier_wait((pthread_barrier_t *)args->barrier);
@@ -34,7 +34,8 @@ void *compute_prefix_sum(void *a) {
 
     synchronize_on_barrier(args);
 
-    // reduce the partition processor sums
+    // TODO
+    // reduce/scan the partition processor sums
     if (args->t_id == 0) {
         args->output_vals[0] = args->input_vals[0];
         for (int i = 2*block_size - 1; i < args->n_vals; i += block_size) {
