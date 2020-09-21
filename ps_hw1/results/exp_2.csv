@@ -1,0 +1,7 @@
+algorithm, input, 10, 50, 100, 500, 1000, 5000, 10000
+parallel_block_sequential_sum, 16k.txt/0, 231, 1325, 2629, 12604, 25008, 142803, 286450
+parallel_block_sequential_sum, 16k.txt/8, 568, 1274, 1882, 8015, 14514, 66073, 121987
+parallel_block_parallel_sum, 16k.txt/0, 363, 1313, 2443, 12305, 24310, 144048, 287365
+parallel_block_parallel_sum, 16k.txt/8, 708, 1255, 2297, 9422, 23899, 64304, 130398
+parallel_tree_sum, 16k.txt/0, 363, 1117, 2464, 13938, 28588, 124971, 282574
+parallel_tree_sum, 16k.txt/8, 1408, 1773, 2721, 9473, 17129, 85817, 146810
