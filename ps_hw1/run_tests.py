@@ -41,9 +41,8 @@ def run_check():
                             raise BaseException("Results are not consistent/correct! Check {} vs {}".format(
                                 seq_file.name, file.name))
 
-def run_exp_1():
+def run_exp_1(loop, spin):
     THREADS = [2 * i for i in range(0, 17)]
-    LOOPS = [10000]
     #  THREADS = [2 * i for i in range(0, 2)]
     #  LOOPS = [1]
     INPUTS = ["seq_64_test.txt", "1k.txt", "8k.txt", "16k.txt"]
@@ -54,13 +53,52 @@ def run_exp_1():
     csvs = []
     for inp in INPUTS:
         for algo in ALGOS:
-            for loop in LOOPS:
-                csv = [ALGO_MAP[algo], "{}/{}".format(inp, loop)]
+            csv = [ALGO_MAP[algo], "{}/{}".format(inp, loop)]
 
-                for thr in THREADS:
+            for thr in THREADS:
 
-                    cmd = "./bin/prefix_scan -o temp.txt -n {} -i tests/{} -l {} -a {}".format(
-                        thr, inp, loop, algo)
+                cmd = "./bin/prefix_scan -o temp.txt -n {} -i tests/{} -l {} -a {} {}".format(
+                    thr, inp, loop, algo, spin)
+                out = check_output(cmd, shell=True).decode("ascii")
+                m = re.search("time: (.*)", out)
+                if m is not None:
+                    time = m.group(1)
+                    csv.append(time)
+
+            csvs.append(csv)
+            sleep(0.5)
+
+    header = ["algorithm", "input"] + [str(x) for x in THREADS]
+
+    pickle.dump([header] + csvs, open("results/exp_1-{}{}.pickle".format(loop, spin), 'wb'))
+
+    exp_1_file = open("results/exp_1-{}{}.csv".format(loop, spin), "w")
+    exp_1_file.write(", ".join(header))
+    exp_1_file.write("\n")
+    for csv in csvs:
+        exp_1_file.write(", ".join(csv))
+        exp_1_file.write("\n")
+
+def run_exp_2(spin):
+    THREADS = [0, 8]
+    LOOPS = [10, 50, 100, 500, 1000, 5000, 10000]
+    #  LOOPS = [10, 100, 1000, 10000]
+    #  THREADS = [2 * i for i in range(0, 2)]
+    #  LOOPS = [1]
+    INPUTS = ["16k.txt"]
+    ALGOS = [0, 1, 2]
+
+    print("Running experiment 2..")
+
+    csvs = []
+    for inp in INPUTS:
+        for algo in ALGOS:
+            for thr in THREADS:
+                csv = [ALGO_MAP[algo], "{}/{}".format(inp, thr)]
+
+                for loop in LOOPS:
+                    cmd = "./bin/prefix_scan -o temp.txt -n {} -i tests/{} -l {} -a {}  {}".format(
+                        thr, inp, loop, algo, spin)
                     out = check_output(cmd, shell=True).decode("ascii")
                     m = re.search("time: (.*)", out)
                     if m is not None:
@@ -70,11 +108,11 @@ def run_exp_1():
                 csvs.append(csv)
                 sleep(0.5)
 
-    header = ["algorithm", "input"] + [str(x) for x in THREADS]
+    header = ["algorithm", "input"] + [str(loop) for loop in LOOPS]
 
-    pickle.dump([header] + csvs, open("results/exp_1.pickle", 'wb'))
-    
-    exp_1_file = open("results/exp_1.csv", "w")
+    pickle.dump([header] + csvs, open("results/exp_2{}.pickle".format(spin), 'wb'))
+
+    exp_1_file = open("results/exp_2{}.csv".format(spin), "w")
     exp_1_file.write(", ".join(header))
     exp_1_file.write("\n")
     for csv in csvs:
@@ -82,4 +120,8 @@ def run_exp_1():
         exp_1_file.write("\n")
 
 run_check()
-run_exp_1()
+run_exp_1(10000, "")
+run_exp_1(10, "")
+run_exp_2("")
+run_exp_1(10, "-s")
+run_exp_2("-s")
