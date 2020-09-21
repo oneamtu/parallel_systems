@@ -56,19 +56,22 @@ def run_exp_1(loop, spin):
             csv = [ALGO_MAP[algo], "{}/{}".format(inp, loop)]
 
             for thr in THREADS:
+                time = 0
 
-                cmd = "./bin/prefix_scan -o temp.txt -n {} -i tests/{} -l {} -a {} {}".format(
-                    thr, inp, loop, algo, spin)
-                out = check_output(cmd, shell=True).decode("ascii")
-                m = re.search("time: (.*)", out)
-                if m is not None:
-                    time = m.group(1)
-                    csv.append(time)
+                for i in range(0, 4):
+                    cmd = "./bin/prefix_scan -o temp.txt -n {} -i tests/{} -l {} -a {} {}".format(
+                        thr, inp, loop, algo, spin)
+                    out = check_output(cmd, shell=True).decode("ascii")
+                    m = re.search("time: (.*)", out)
+                    if m is not None:
+                        time = time + int(m.group(1))
+
+                csv.append(time/4)
 
             csvs.append(csv)
             sleep(0.5)
 
-    header = ["algorithm", "input"] + [str(x) for x in THREADS]
+    header = ["algorithm", "input"] + [x for x in THREADS]
 
     pickle.dump([header] + csvs, open("results/exp_1-{}{}.pickle".format(loop, spin), 'wb'))
 
@@ -81,7 +84,7 @@ def run_exp_1(loop, spin):
 
 def run_exp_2(spin):
     THREADS = [0, 8]
-    LOOPS = [10, 50, 100, 500, 1000, 5000, 10000]
+    LOOPS = [10, 50, 100, 500, 1000, 5000, 10000, 50000, 100000]
     #  LOOPS = [10, 100, 1000, 10000]
     #  THREADS = [2 * i for i in range(0, 2)]
     #  LOOPS = [1]
@@ -97,18 +100,21 @@ def run_exp_2(spin):
                 csv = [ALGO_MAP[algo], "{}/{}".format(inp, thr)]
 
                 for loop in LOOPS:
-                    cmd = "./bin/prefix_scan -o temp.txt -n {} -i tests/{} -l {} -a {}  {}".format(
-                        thr, inp, loop, algo, spin)
-                    out = check_output(cmd, shell=True).decode("ascii")
-                    m = re.search("time: (.*)", out)
-                    if m is not None:
-                        time = m.group(1)
-                        csv.append(time)
+                    time = 0
 
+                    for i in range(0, 4):
+                        cmd = "./bin/prefix_scan -o temp.txt -n {} -i tests/{} -l {} -a {}  {}".format(
+                            thr, inp, loop, algo, spin)
+                        out = check_output(cmd, shell=True).decode("ascii")
+                        m = re.search("time: (.*)", out)
+                        if m is not None:
+                            time = time + int(m.group(1))
+
+                    csv.append(time)
                 csvs.append(csv)
                 sleep(0.5)
 
-    header = ["algorithm", "input"] + [str(loop) for loop in LOOPS]
+    header = ["algorithm", "input"] + [loop for loop in LOOPS]
 
     pickle.dump([header] + csvs, open("results/exp_2{}.pickle".format(spin), 'wb'))
 
