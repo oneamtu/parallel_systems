@@ -75,13 +75,6 @@ def run_exp_1(loop, spin):
 
     pickle.dump([header] + csvs, open("results/exp_1-{}{}.pickle".format(loop, spin), 'wb'))
 
-    exp_1_file = open("results/exp_1-{}{}.csv".format(loop, spin), "w")
-    exp_1_file.write(", ".join(header))
-    exp_1_file.write("\n")
-    for csv in csvs:
-        exp_1_file.write(", ".join(csv))
-        exp_1_file.write("\n")
-
 def run_exp_2(spin):
     THREADS = [0, 8]
     LOOPS = [10, 50, 100, 500, 1000, 5000, 10000, 50000, 100000]
@@ -117,13 +110,6 @@ def run_exp_2(spin):
     header = ["algorithm", "input"] + [loop for loop in LOOPS]
 
     pickle.dump([header] + csvs, open("results/exp_2{}.pickle".format(spin), 'wb'))
-
-    exp_1_file = open("results/exp_2{}.csv".format(spin), "w")
-    exp_1_file.write(", ".join(header))
-    exp_1_file.write("\n")
-    for csv in csvs:
-        exp_1_file.write(", ".join(csv))
-        exp_1_file.write("\n")
 
 run_check()
 run_exp_1(10000, "")
