@@ -21,6 +21,10 @@ void assign_point_cluster_ids(int n_points, int d, real *points,
         dist_2 += POW2(centroids[j*d + l] - points[i*d + l]);
       }
 
+      // if (i == 8) {
+      //   printf("p %d k %d d %f", i, j, dist_2);
+      // }
+
       if (nearest_centroid_dist > dist_2) {
         nearest_centroid_dist = dist_2;
         nearest_centroid = j;
@@ -84,8 +88,8 @@ int k_means_sequential(int n_points, real *points, struct options_t *opts,
   while(!done) {
     // printf("Old centroids\n");
     // PRINT_CENTROIDS(*old_centroids, opts->dimensions, opts->n_clusters);
-    // DEBUG_PRINT(printf("New centroids\n"));
-    // DEBUG_PRINT(print_centroids(*new_centroids, opts->dimensions, opts->n_clusters));
+    DEBUG_PRINT(printf("Old centroids\n"));
+    DEBUG_PRINT(PRINT_CENTROIDS(*old_centroids, opts->dimensions, opts->n_clusters));
 
     assign_point_cluster_ids(n_points, opts->dimensions, points,
         point_cluster_ids, opts->n_clusters, k_counts, *old_centroids);

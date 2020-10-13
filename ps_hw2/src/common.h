@@ -15,7 +15,13 @@
 
 #define POW2(x) (x)*(x)
 
+#define REAL_FLOAT 1
+
+#ifdef REAL_FLOAT
+using real = float;
+#else
 using real = double;
+#endif
 
 #define PRINT_POINT(x, d, i) { \
   for (int _i = i*d; _i < (i+1)*d; _i++) \

@@ -16,6 +16,7 @@ typedef thrust::device_vector<real> dv_real;
 typedef thrust::device_vector<int> dv_int;
 typedef thrust::host_vector<real> hv_real;
 
+// referenced from piazza, which references NVidia
 __device__ double datomicAdd(double* address, double val)
 {
   unsigned long long int* address_as_ull =
@@ -94,7 +95,11 @@ struct centroid_means : public thrust::unary_function<void, real_indexed> {
     int target_centroid_component_id = target_centroid_id*d + index % d;
     // printf("%lf %i %i %i\n", value, index, target_centroid_id, target_centroid_component_id);
 
+#ifdef REAL_FLOAT
+    atomicAdd(centroids + target_centroid_component_id, value);
+#else
     datomicAdd(centroids + target_centroid_component_id, value);
+#endif
   }
 };
 
