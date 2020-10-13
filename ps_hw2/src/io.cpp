@@ -1,7 +1,7 @@
 #include "io.h"
-#include "debug.h"
+#include "common.h"
 
-void read_file(struct options_t* args, int* n_points, double** points) {
+void read_file(struct options_t* args, int* n_points, real** points) {
 
   // Open file
   std::ifstream in;
@@ -10,7 +10,7 @@ void read_file(struct options_t* args, int* n_points, double** points) {
   in >> *n_points;
 
   // Alloc input and output arrays
-  *points = (double*) malloc(*n_points * args->dimensions * sizeof(double));
+  *points = (real*) malloc(*n_points * args->dimensions * sizeof(real));
 
   int index;
 

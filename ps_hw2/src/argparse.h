@@ -3,13 +3,14 @@
 #include <getopt.h>
 #include <stdlib.h>
 #include <iostream>
+#include "common.h"
 
 struct options_t {
     int n_clusters;
     int dimensions;
     char *in_file;
     int max_iterations;
-    double threshold;
+    real threshold;
     bool print_centroids;
     int seed;
     int algorithm;
