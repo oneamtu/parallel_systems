@@ -45,19 +45,8 @@ void compute_new_centroids(int n_points, int d, real *points,
   for (int i = 0; i < k; i++) {
     if (k_counts[i] == 0) {
       // if the centroid "vanished"
-      // pick another random point from the biggest cluster
-      int max = 0;
-      int max_i = 0;
-
-      for (int l = 0; l < k; l++) {
-        if (max < k_counts[i]) {
-          max = k_counts[i];
-          max_i = i;
-        }
-      }
-
-      int index;
-      { index = k_means_rand() % n_points; } while(point_cluster_ids[index] != max_i);
+      int index = 0;
+      index = k_means_rand() % n_points;
       std::memcpy(&new_centroids[i*d], &points[index*d], d * sizeof(real));
     }
     else {
@@ -113,8 +102,10 @@ int k_means_sequential(int n_points, real *points, struct options_t *opts,
     *old_centroids = *centroids;
 
     iterations++;
+    DEBUG_OUT(iterations);
     done = (iterations > opts->max_iterations) ||
       converged(opts->n_clusters, opts->dimensions, opts->threshold, centroids_1, centroids_2);
+    DEBUG_OUT(done);
   }
   // release the other centroids buffer
   free(*new_centroids);

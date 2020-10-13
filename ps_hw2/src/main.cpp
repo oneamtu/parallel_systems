@@ -6,6 +6,7 @@
 #include "seed.h"
 #include "k_means_sequential.h"
 #include "k_means_thrust.h"
+#include "k_means_cuda.h"
 
 int main(int argc, char **argv) {
   // Parse args
@@ -32,14 +33,22 @@ int main(int argc, char **argv) {
       DEBUG_OUT("Running k_means_sequential:");
 
       iterations = k_means_sequential(n_points, points, &opts, point_cluster_ids, &centroids);
+
+      DEBUG_OUT("Finished k_means_sequential:");
       break;
     case 1:
       DEBUG_OUT("Running k_means_thrust:");
 
       iterations = k_means_thrust(n_points, points, &opts, point_cluster_ids, &centroids);
+
+      DEBUG_OUT("Finished k_means_thrust:");
       break;
     case 2:
-      // start_threads(threads, opts.n_threads, ps_args, compute_prefix_parallel_tree_sum);
+      DEBUG_OUT("Running k_means_cuda:");
+
+      iterations = k_means_cuda(n_points, points, &opts, point_cluster_ids, &centroids);
+
+      DEBUG_OUT("Finished k_means_cuda:");
       break;
   }
 

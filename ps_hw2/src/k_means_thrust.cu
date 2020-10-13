@@ -7,6 +7,7 @@
 #include <thrust/iterator/zip_iterator.h>
 #include <thrust/reduce.h>
 #include <thrust/copy.h>
+#include <thrust/logical.h>
 
 #include "k_means_thrust.h"
 #include "common.h"
@@ -52,6 +53,7 @@ __device__ double datomicAdd(double* address, double val)
 
 typedef thrust::tuple<real, int> real_indexed;
 typedef thrust::tuple<int, int> two_ints;
+typedef thrust::tuple<real, real> two_realz;
 
 // map an index -> component l of point index i and centroid index j
 // and then compute the distance component of l
@@ -138,6 +140,20 @@ struct maximum_by_first : public thrust::binary_function<real_indexed, real_inde
   }
 };
 
+struct l1_op : public thrust::unary_function<bool, two_realz> {
+  const real l1_thresh;
+  l1_op(real _l1_thresh) : l1_thresh(_l1_thresh) {}
+
+  __host__ __device__
+  bool operator()(two_realz realz) {
+    // (_1 - _2 < 0 ? _2 - _1 : _1 - _2) < l1_thresh
+    real x1 = thrust::get<0>(realz);
+    real x2 = thrust::get<1>(realz);
+
+    return abs(x1 - x2) < l1_thresh;
+  }
+};
+
 int k_means_thrust(int n_points, real *points, struct options_t *opts,
   int* point_cluster_ids, real** centroids) {
 
@@ -158,6 +174,7 @@ int k_means_thrust(int n_points, real *points, struct options_t *opts,
 
   dv_real point_centroid_distances(n_points * k);
   dv_int d_point_cluster_ids(n_points);
+  dv_int unsorted_d_point_cluster_ids(n_points);
 
   dv_int d_k_counts(k);
   dv_int d_k_count_keys(k);
@@ -194,20 +211,20 @@ int k_means_thrust(int n_points, real *points, struct options_t *opts,
       make_zip_iterator(
         make_tuple(
           make_discard_iterator(), //discard distance values
-          d_point_cluster_ids.begin())),
+          unsorted_d_point_cluster_ids.begin())),
       equal_to<int>(),
       maximum_by_first()
     );
 
     transform(
-      d_point_cluster_ids.begin(),
-      d_point_cluster_ids.end(),
-      d_point_cluster_ids.begin(),
+      unsorted_d_point_cluster_ids.begin(),
+      unsorted_d_point_cluster_ids.end(),
+      unsorted_d_point_cluster_ids.begin(),
       _1 % k
     );
 
-    DEBUG_OUT("%k d_point_cluster_ids");
-    D_PRINT_ALL(d_point_cluster_ids);
+    DEBUG_OUT("%k unsorted_d_point_cluster_ids");
+    D_PRINT_ALL(unsorted_d_point_cluster_ids);
 
     // zero the new centroids
     fill(new_centroids.begin(), new_centroids.end(), 0);
@@ -229,7 +246,7 @@ int k_means_thrust(int n_points, real *points, struct options_t *opts,
     // ok, no fancy reduce_by_key
 
     centroid_means centroid_means(d,
-      raw_pointer_cast(d_point_cluster_ids.data()),
+      raw_pointer_cast(unsorted_d_point_cluster_ids.data()),
       raw_pointer_cast(new_centroids.data()));
 
     for_each(
@@ -243,6 +260,8 @@ int k_means_thrust(int n_points, real *points, struct options_t *opts,
     DEBUG_OUT("new_centroids sums");
     D_PRINT_ALL(new_centroids);
     // D_PRINT_ALL(v);
+
+    d_point_cluster_ids = unsorted_d_point_cluster_ids;
 
     sort(
       d_point_cluster_ids.begin(),
@@ -282,16 +301,27 @@ int k_means_thrust(int n_points, real *points, struct options_t *opts,
     // swap centroids
     swap(new_centroids, old_centroids);
 
+    real l1_thresh = opts->threshold/d;
+
+    bool converged = transform_reduce(
+      make_zip_iterator(
+        make_tuple(new_centroids.begin(), old_centroids.begin())),
+      make_zip_iterator(
+        make_tuple(new_centroids.end(), old_centroids.end())),
+      l1_op(l1_thresh),
+      true,
+      logical_and<bool>()
+    );
+
     iterations++;
-    done = (iterations > opts->max_iterations);
-    //   converged(k, d, opts->threshold, centroids_1, centroids_2); TODO
+    done = (iterations > opts->max_iterations) || converged;
   }
   // release the other centroids buffer
 
   DEBUG_OUT(iterations > opts->max_iterations ? "Max iterations reached!" : "Converged!" );
 
   copy(old_centroids.begin(), old_centroids.end(), *centroids);
-  copy(d_point_cluster_ids.begin(), d_point_cluster_ids.end(), point_cluster_ids);
+  copy(unsorted_d_point_cluster_ids.begin(), unsorted_d_point_cluster_ids.end(), point_cluster_ids);
 
   return iterations;
 }
