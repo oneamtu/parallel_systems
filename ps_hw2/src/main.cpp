@@ -29,12 +29,12 @@ int main(int argc, char **argv) {
   switch (opts.algorithm)
   {
     case 0:
-      DEBUG("Running k_means_sequential:");
+      DEBUG_OUT("Running k_means_sequential:");
 
       iterations = k_means_sequential(n_points, points, &opts, point_cluster_ids, &centroids);
       break;
     case 1:
-      DEBUG("Running k_means_thrust:");
+      DEBUG_OUT("Running k_means_thrust:");
 
       iterations = k_means_thrust(n_points, points, &opts, point_cluster_ids, &centroids);
       break;

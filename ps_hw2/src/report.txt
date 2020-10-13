@@ -1,0 +1,12 @@
+1. I used codio (and ssh/sshfs/vim).
+2.
+
+TODO
+move report.txt
+add thrust converge
+add thrust handle 0-counts
+incorrect points reported
+add timer
+write report (check device)
+add CUDA
+add CUDA shmem

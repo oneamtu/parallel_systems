@@ -20,7 +20,7 @@ void read_file(struct options_t* args, int* n_points, real** points) {
     in >> (*points)[i];
   }
 
-  DEBUG(index);
-  DEBUG((*points)[0]);
-  DEBUG((*points)[*n_points * args->dimensions - 1]);
+  DEBUG_OUT(index);
+  DEBUG_OUT((*points)[0]);
+  DEBUG_OUT((*points)[*n_points * args->dimensions - 1]);
 }

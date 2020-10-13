@@ -28,7 +28,7 @@ void assign_point_cluster_ids(int n_points, int d, real *points,
     }
 
     point_cluster_ids[i] = nearest_centroid;
-    DEBUG_PRINT(printf("%d %lf ", nearest_centroid, nearest_centroid_dist));
+    // DEBUG_PRINT(printf("%d %lf ", nearest_centroid, nearest_centroid_dist));
     k_counts[nearest_centroid]++;
   }
 }
@@ -93,10 +93,8 @@ int k_means_sequential(int n_points, real *points, struct options_t *opts,
   real **new_centroids = &centroids_2;
 
   while(!done) {
-    printf("Old centroids\n");
-    DEBUG(*old_centroids[0]);
-    DEBUG(*old_centroids[1]);
-    DEBUG(*old_centroids[4]);
+    // printf("Old centroids\n");
+    // PRINT_CENTROIDS(*old_centroids, opts->dimensions, opts->n_clusters);
     // DEBUG_PRINT(printf("New centroids\n"));
     // DEBUG_PRINT(print_centroids(*new_centroids, opts->dimensions, opts->n_clusters));
 
@@ -106,10 +104,8 @@ int k_means_sequential(int n_points, real *points, struct options_t *opts,
     compute_new_centroids(n_points, opts->dimensions, points,
         point_cluster_ids, opts->n_clusters, k_counts, *new_centroids, *old_centroids);
 
-    printf("New new_centroids\n");
-    DEBUG(*new_centroids[0]);
-    DEBUG(*new_centroids[1]);
-    DEBUG(*new_centroids[4]);
+    // printf("New new_centroids\n");
+    // PRINT_CENTROIDS(*new_centroids, opts->dimensions, opts->n_clusters);
 
     // swap centroids
     *centroids = *new_centroids;
@@ -124,7 +120,7 @@ int k_means_sequential(int n_points, real *points, struct options_t *opts,
   free(*new_centroids);
   free(k_counts);
 
-  DEBUG(iterations > opts->max_iterations ? "Max iterations reached!" : "Converged!" );
+  DEBUG_OUT(iterations > opts->max_iterations ? "Max iterations reached!" : "Converged!" );
 
   return iterations;
 }

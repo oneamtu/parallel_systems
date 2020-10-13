@@ -29,29 +29,29 @@ __device__ double datomicAdd(double* address, double val)
   return __longlong_as_double(old);
 }
 
-#ifdef DEBUG
 #define D_PRINT_POINT(x, d, i) { \
-thrust::copy_n( \
-    x.begin() + i*d, \
-    d, \
-    std::ostream_iterator<real>(std::cerr, ", ") \
-  ); \
-  std::cerr << std::endl;\
+  if(DEBUG_TEST) {\
+    thrust::copy_n( \
+      x.begin() + i*d, \
+      d, \
+      std::ostream_iterator<real>(std::cerr, ", ") \
+    ); \
+    std::cerr << std::endl;\
+  }\
 }
 #define D_PRINT_ALL(x) { \
-thrust::copy( \
-    x.begin(), \
-    x.end(), \
-    std::ostream_iterator<real>(std::cerr, ", ") \
-  ); \
-  std::cerr << std::endl;\
+  if(DEBUG_TEST) {\
+    thrust::copy( \
+      x.begin(), \
+      x.end(), \
+      std::ostream_iterator<real>(std::cerr, ", ") \
+    ); \
+    std::cerr << std::endl;\
+  }\
 }
-#else
-#define D_PRINT_POINT(x, d, i)
-#define D_PRINT_ALL(x)
-#endif
 
 typedef thrust::tuple<real, int> real_indexed;
+typedef thrust::tuple<int, int> two_ints;
 
 // map an index -> component l of point index i and centroid index j
 // and then compute the distance component of l
@@ -77,12 +77,12 @@ struct distance_component : public thrust::unary_function<int, real> {
 // sum up each point component into a new centroid
 struct centroid_means : public thrust::unary_function<void, real_indexed> {
   const int d;
-  const int *d_point_cluster_ids, *d_k_counts;
+  const int *d_point_cluster_ids;
   real *centroids;
 
-  centroid_means(int _d, int *_d_point_cluster_ids, int *_d_k_counts, real *_centroids)
+  centroid_means(int _d, int *_d_point_cluster_ids, real *_centroids)
     : d(_d), d_point_cluster_ids(_d_point_cluster_ids),
-    d_k_counts(_d_k_counts), centroids(_centroids) {}
+    centroids(_centroids) {}
 
   __device__
   void operator()(real_indexed real_index) {
@@ -90,8 +90,25 @@ struct centroid_means : public thrust::unary_function<void, real_indexed> {
     int index = thrust::get<1>(real_index);
     int target_centroid_id = d_point_cluster_ids[index / d];
     int target_centroid_component_id = target_centroid_id*d + index % d;
+    // printf("%lf %i %i %i\n", value, index, target_centroid_id, target_centroid_component_id);
 
-    datomicAdd(centroids + target_centroid_component_id, value / d_k_counts[target_centroid_id]);
+    datomicAdd(centroids + target_centroid_component_id, value);
+  }
+};
+
+struct centroid_divide : public thrust::unary_function<void, two_ints> {
+  const int d, i;
+  real *centroids;
+
+  centroid_divide(int _d, int _i, real *_centroids)
+    : d(_d), i(_i), centroids(_centroids) {}
+
+  __device__
+  void operator()(two_ints ints) {
+    int centroid_id = thrust::get<0>(ints);
+    int counts = thrust::get<1>(ints);
+
+    *(centroids + centroid_id*d + i) /= counts;
   }
 };
 
@@ -146,7 +163,7 @@ int k_means_thrust(int n_points, real *points, struct options_t *opts,
   dv_int d_k_count_keys(k);
 
   while(!done) {
-    DEBUG("old centroid");
+    DEBUG_OUT("old centroid");
     D_PRINT_ALL(old_centroids);
 
     distance_component distance_component(d, k,
@@ -162,7 +179,7 @@ int k_means_thrust(int n_points, real *points, struct options_t *opts,
       point_centroid_distances.begin()
     );
 
-    DEBUG("centroid distance");
+    DEBUG_OUT("centroid distance");
     D_PRINT_ALL(point_centroid_distances);
 
     // reduce to the index of the nearest centroid
@@ -189,35 +206,8 @@ int k_means_thrust(int n_points, real *points, struct options_t *opts,
       _1 % k
     );
 
-    DEBUG("%k d_point_cluster_ids");
+    DEBUG_OUT("%k d_point_cluster_ids");
     D_PRINT_ALL(d_point_cluster_ids);
-
-    sort(
-      d_point_cluster_ids.begin(),
-      d_point_cluster_ids.end()
-    );
-
-    //compute the point count for each centroid
-    auto new_end = reduce_by_key(
-      d_point_cluster_ids.begin(),
-      d_point_cluster_ids.end(),
-      make_constant_iterator(1),
-      d_k_count_keys.begin(),
-      d_k_counts.begin()
-    );
-
-    sort_by_key(
-      d_k_count_keys.begin(),
-      new_end.first,
-      d_k_counts.begin()
-    );
-    // zero out any stragglers
-    fill(new_end.second, d_k_counts.end(), 0);
-
-    DEBUG("k_counts");
-    D_PRINT_ALL(d_k_counts);
-    D_PRINT_ALL(d_k_count_keys);
-    DEBUG(new_end.first - d_k_count_keys.end());
 
     // zero the new centroids
     fill(new_centroids.begin(), new_centroids.end(), 0);
@@ -240,7 +230,6 @@ int k_means_thrust(int n_points, real *points, struct options_t *opts,
 
     centroid_means centroid_means(d,
       raw_pointer_cast(d_point_cluster_ids.data()),
-      raw_pointer_cast(d_k_counts.data()),
       raw_pointer_cast(new_centroids.data()));
 
     for_each(
@@ -251,9 +240,44 @@ int k_means_thrust(int n_points, real *points, struct options_t *opts,
       centroid_means
     );
 
-    DEBUG("new_centroids sums");
+    DEBUG_OUT("new_centroids sums");
     D_PRINT_ALL(new_centroids);
     // D_PRINT_ALL(v);
+
+    sort(
+      d_point_cluster_ids.begin(),
+      d_point_cluster_ids.end()
+    );
+
+    //compute the point count for each centroid
+    auto new_end = reduce_by_key(
+      d_point_cluster_ids.begin(),
+      d_point_cluster_ids.end(),
+      make_constant_iterator(1),
+      d_k_count_keys.begin(),
+      d_k_counts.begin()
+    );
+
+    // zero out any stragglers
+    fill(new_end.second, d_k_counts.end(), 0);
+
+    DEBUG_OUT("k_counts");
+    D_PRINT_ALL(d_k_counts);
+    D_PRINT_ALL(d_k_count_keys);
+    // assert(new_end.first == d_k_count_keys.end());
+
+    for (int i = 0; i < d; i++) {
+      for_each(
+        make_zip_iterator(
+          make_tuple(d_k_count_keys.begin(), d_k_counts.begin())),
+        make_zip_iterator(
+          make_tuple(new_end.first, new_end.second)),
+        centroid_divide(d, i, raw_pointer_cast(new_centroids.data()))
+      );
+    }
+
+    DEBUG_OUT("new_centroids means");
+    D_PRINT_ALL(new_centroids);
 
     // swap centroids
     swap(new_centroids, old_centroids);
@@ -264,7 +288,7 @@ int k_means_thrust(int n_points, real *points, struct options_t *opts,
   }
   // release the other centroids buffer
 
-  DEBUG(iterations > opts->max_iterations ? "Max iterations reached!" : "Converged!" );
+  DEBUG_OUT(iterations > opts->max_iterations ? "Max iterations reached!" : "Converged!" );
 
   copy(old_centroids.begin(), old_centroids.end(), *centroids);
   copy(d_point_cluster_ids.begin(), d_point_cluster_ids.end(), point_cluster_ids);
