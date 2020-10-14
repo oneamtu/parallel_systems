@@ -182,6 +182,7 @@ int k_means_thrust(int n_points, real *points, struct options_t *opts,
   cudaEventCreate(&out_stop);
 
   // timer code - 0_Simple/simpleMultiCopy/simpleMultiCopy.cu
+  cudaEventRecord(start, 0);
   cudaEventRecord(in_start, 0);
 
   dv_real d_points(points, points + n_points * d);

@@ -8,7 +8,7 @@ EXEC = bin/kmeans
 all: clean compile
 
 compile:
-	$(CC) $(SRCS) $(OPTS) -I$(INC) -o $(EXEC)
+	$(CC) -O3 $(SRCS) $(OPTS) -I$(INC) -o $(EXEC)
 
 debug:
 	$(CC) $(SRCS) $(OPTS) -DDEBUG -I$(INC) -o $(EXEC) -g

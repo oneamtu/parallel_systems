@@ -19,32 +19,39 @@ __device__ double ratomicAdd(double* address, double val) {
   return __longlong_as_double(old);
 }
 
-__global__ void compute_point_centroid_distances_shmem(int d, int n_points,
+__global__ void compute_point_centroid_distances_shmem(int d, int k, int n_points,
     real *d_points, real *centroids, real *point_centroid_distances) {
   const unsigned int point_id = blockIdx.x * blockDim.x + threadIdx.x;
   const unsigned int centroid_id = threadIdx.y;
-  real sum = 0;
+  const unsigned int i = threadIdx.z;
 
   extern __shared__ real s[];
   real *s_centroids = s;
+  real *sums = s + d * blockDim.y;
 
   if (point_id >= n_points) {
     return ;
   }
 
-  for (int i = 0; i < d; i++) {
-    s_centroids[threadIdx.y + i] = centroids[centroid_id*d + i];
-  }
+  s_centroids[centroid_id*d + i] = centroids[centroid_id*d + i];
+  sums[threadIdx.x*k + centroid_id] = 0;
 
-  for (int i = 0; i < d; i++) {
-    real p = d_points[point_id*d + i];
-    sum += POW2(p - s_centroids[threadIdx.y + i]);
+  __syncthreads();
+
+  real p = d_points[point_id*d + i];
+
+#ifdef REAL_FLOAT
+  atomicAdd(sums + threadIdx.x*k + centroid_id, POW2(p - s_centroids[centroid_id*d + i]));
+#else
+  ratomicAdd(sums + threadIdx.x*k + centroid_id, POW2(p - s_centroids[centroid_id*d + i]));
+#endif
 
     // if (point_id == 8) {
     //   DEBUG_PRINT(printf("i %d p %f c %f s %f", point_id, p, c, sum));
     // }
-  }
-  point_centroid_distances[point_id*blockDim.y + centroid_id] = sum;
+  __syncthreads();
+
+  point_centroid_distances[point_id*k + centroid_id] = sums[threadIdx.x*k + centroid_id];
   // if (point_id == 8) {
   //   DEBUG_PRINT(printf("p %d k %d d %f ", point_id, centroid_id, sum));
   // }
@@ -54,22 +61,22 @@ __global__ void compute_point_centroid_distances(int d, int k, int n_points,
     real *d_points, real *centroids, real *point_centroid_distances) {
   const unsigned int point_id = blockIdx.x * blockDim.x + threadIdx.x;
   const unsigned int centroid_id = threadIdx.y;
-  real sum = 0;
 
   if (point_id >= n_points) {
     return ;
   }
 
-  for (int i = 0; i < d; i++) {
-    real p = d_points[point_id*d + i];
-    real c = centroids[centroid_id*d + i];
-    sum += POW2(p - c);
+  real p = d_points[point_id*d + threadIdx.z];
+  real c = centroids[centroid_id*d + threadIdx.z];
 
-    // if (point_id == 8) {
-    //   DEBUG_PRINT(printf("i %d p %f c %f s %f", point_id, p, c, sum));
-    // }
-  }
-  point_centroid_distances[point_id*k + centroid_id] = sum;
+  // if (point_id == 8) {
+  //   DEBUG_PRINT(printf("i %d p %f c %f s %f", point_id, p, c, sum));
+  // }
+#ifdef REAL_FLOAT
+  atomicAdd(point_centroid_distances + point_id*k + centroid_id, POW2(p - c));
+#else
+  ratomicAdd(point_centroid_distances + point_id*k + centroid_id, POW2(p - c));
+#endif
   // if (point_id == 8) {
   //   DEBUG_PRINT(printf("p %d k %d d %f ", point_id, centroid_id, sum));
   // }
@@ -107,6 +114,7 @@ __global__ void compute_new_centroids_shmem(int d, int n_points, real *d_points,
     unsigned int* d_k_counts, int *d_point_cluster_ids, real *centroids) {
   const unsigned int point_id = blockIdx.x * blockDim.x + threadIdx.x;
   const int nearest_centroid = d_point_cluster_ids[point_id];
+  const int i = threadIdx.y;
 
   extern __shared__ unsigned int s_new_centroids[];
   unsigned int *s_k_counts = s_new_centroids;
@@ -116,15 +124,13 @@ __global__ void compute_new_centroids_shmem(int d, int n_points, real *d_points,
     return ;
   }
 
-  for (int i = 0; i < d; i++) {
 #ifdef REAL_FLOAT
-    atomicAdd(centroids + nearest_centroid*d+i,
-        d_points[point_id*d+i]/s_k_counts[nearest_centroid]);
+  atomicAdd(centroids + nearest_centroid*d+i,
+      d_points[point_id*d+i]/s_k_counts[nearest_centroid]);
 #else
-    ratomicAdd(centroids + nearest_centroid*d+i,
-        d_points[point_id*d+i]/s_k_counts[nearest_centroid]);
+  ratomicAdd(centroids + nearest_centroid*d+i,
+      d_points[point_id*d+i]/s_k_counts[nearest_centroid]);
 #endif
-  }
 }
 
 __global__ void compute_new_centroids(int d, int n_points, real *d_points,
@@ -132,20 +138,19 @@ __global__ void compute_new_centroids(int d, int n_points, real *d_points,
   const unsigned int point_id = blockIdx.x * blockDim.x + threadIdx.x;
   const int nearest_centroid = d_point_cluster_ids[point_id];
   const unsigned int count = d_k_counts[nearest_centroid];
+  const int i = threadIdx.y;
 
   if (point_id >= n_points) {
     return ;
   }
 
-  for (int i = 0; i < d; i++) {
 #ifdef REAL_FLOAT
-    atomicAdd(centroids + nearest_centroid*d+i,
-        d_points[point_id*d+i]/count);
+  atomicAdd(centroids + nearest_centroid*d+i,
+      d_points[point_id*d+i]/count);
 #else
-    ratomicAdd(centroids + nearest_centroid*d+i,
-        d_points[point_id*d+i]/count);
+  ratomicAdd(centroids + nearest_centroid*d+i,
+      d_points[point_id*d+i]/count);
 #endif
-  }
 }
 
 __global__ void compute_converged(int k, int d, real thresh,
@@ -253,16 +258,16 @@ int k_means_cuda(int n_points, real *points, struct options_t *opts,
       PRINT_CENTROIDS(*centroids, d, k);
     }
 
-    dim3 pcd_threads((((max_thread_size) / k) / 32) * 32, k); //or 4?
+    dim3 pcd_threads(((max_thread_size) / k )/ d, k, d); //or 4?
     dim3 pcd_grid(n_points / pcd_threads.x + (n_points % pcd_threads.x == 0 ? 0 : 1));
 
     if (use_shared_mem) {
-      unsigned int shmem_size = pcd_threads.y * d * sizeof(double);
+      unsigned int shmem_size = pcd_threads.y * d * sizeof(real) + pcd_threads.x * pcd_threads.y * sizeof(real);
 
-      DEBUG_PRINT(printf("compute_point_centroid_distances: b: %d %d %d t: %d %d %d s: %d\n",
+      DEBUG_PRINT(printf("compute_point_centroid_distances_shmem: b: %d %d %d t: %d %d %d s: %d\n",
             pcd_grid.x, pcd_grid.y, pcd_grid.z, pcd_threads.x, pcd_threads.y, pcd_threads.z, shmem_size));
 
-      compute_point_centroid_distances<<< pcd_grid, pcd_threads, shmem_size >>>(d, k, n_points,
+      compute_point_centroid_distances_shmem<<< pcd_grid, pcd_threads, shmem_size >>>(d, k, n_points,
           d_points, old_centroids, point_centroid_distances);
     }
     else {
@@ -274,7 +279,7 @@ int k_means_cuda(int n_points, real *points, struct options_t *opts,
     }
 
     getLastCudaError("compute_point_centroid_distances() execution failed\n");
-    checkCudaErrors(cudaDeviceSynchronize());
+    // checkCudaErrors(cudaDeviceSynchronize());
     DEBUG_OUT(" ");
 
     dim3 pci_threads(max_thread_size); // could include k dim
@@ -290,28 +295,31 @@ int k_means_cuda(int n_points, real *points, struct options_t *opts,
         point_centroid_distances, d_k_counts, d_point_centroid_ids);
 
     getLastCudaError("compute_point_centroid_ids() execution failed\n");
-    checkCudaErrors(cudaDeviceSynchronize());
+    // checkCudaErrors(cudaDeviceSynchronize());
     DEBUG_OUT(" ");
 
+    dim3 cnc_threads(max_thread_size / d, d);
+    dim3 cnc_grid(n_points / cnc_threads.x + (n_points % cnc_threads.x == 0 ? 0 : 1));
+
     if (use_shared_mem) {
-      unsigned int shmem_size = k * sizeof(int);
+      unsigned int shmem_size = k * sizeof(unsigned int);
 
       DEBUG_PRINT(printf("compute_new_centroids: b: %d %d %d t: %d %d %d s: %d\n",
-            pci_grid.x, pci_grid.y, pci_grid.z, pci_threads.x, pci_threads.y, pci_threads.z, shmem_size));
+            cnc_grid.x, cnc_grid.y, cnc_grid.z, cnc_threads.x, cnc_threads.y, cnc_threads.z, shmem_size));
 
-      compute_new_centroids_shmem<<< pci_grid, pci_threads, shmem_size >>>(d, n_points, d_points,
+      compute_new_centroids<<< cnc_grid, cnc_threads, shmem_size >>>(d, n_points, d_points,
           d_k_counts, d_point_centroid_ids, new_centroids);
     }
     else {
       DEBUG_PRINT(printf("compute_new_centroids: b: %d %d %d t: %d %d %d\n",
-            pci_grid.x, pci_grid.y, pci_grid.z, pci_threads.x, pci_threads.y, pci_threads.z));
+            cnc_grid.x, cnc_grid.y, cnc_grid.z, cnc_threads.x, cnc_threads.y, cnc_threads.z));
 
-      compute_new_centroids<<< pci_grid, pci_threads >>>(d, n_points, d_points,
+      compute_new_centroids<<< cnc_grid, cnc_threads >>>(d, n_points, d_points,
           d_k_counts, d_point_centroid_ids, new_centroids);
     }
 
     getLastCudaError("compute_new_centroids() execution failed\n");
-    checkCudaErrors(cudaDeviceSynchronize());
+    // checkCudaErrors(cudaDeviceSynchronize());
     DEBUG_OUT(" ");
 
     DEBUG_PRINT(printf("merge_centroids:\n"));
@@ -319,7 +327,7 @@ int k_means_cuda(int n_points, real *points, struct options_t *opts,
     merge_centroids<<< (k / 512)+1, 512 >>>(k, d, new_centroids, old_centroids);
 
     getLastCudaError("merge_converged() execution failed\n");
-    checkCudaErrors(cudaDeviceSynchronize());
+    // checkCudaErrors(cudaDeviceSynchronize());
     DEBUG_OUT(" ");
 
     // swap centroids
@@ -336,7 +344,7 @@ int k_means_cuda(int n_points, real *points, struct options_t *opts,
     compute_converged<<< (k *d / 512)+1, 512 >>>(k, d, l1_thresh, old_centroids, new_centroids, d_converged);
 
     getLastCudaError("compute_converged() execution failed\n");
-    checkCudaErrors(cudaDeviceSynchronize());
+    // checkCudaErrors(cudaDeviceSynchronize());
     DEBUG_OUT(" ");
 
     bool converged;
