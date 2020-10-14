@@ -23,6 +23,7 @@ int main(int argc, char **argv) {
       opts.n_clusters, centroids, opts.seed);
 
   int iterations = 0;
+  double per_iteration_time = 0;
 
   // Start timer
   auto start = std::chrono::high_resolution_clock::now();
@@ -39,23 +40,38 @@ int main(int argc, char **argv) {
     case 1:
       DEBUG_OUT("Running k_means_thrust:");
 
-      iterations = k_means_thrust(n_points, points, &opts, point_cluster_ids, &centroids);
+      iterations = k_means_thrust(n_points, points, &opts, point_cluster_ids, &centroids, &per_iteration_time);
 
       DEBUG_OUT("Finished k_means_thrust:");
       break;
     case 2:
       DEBUG_OUT("Running k_means_cuda:");
 
-      iterations = k_means_cuda(n_points, points, &opts, point_cluster_ids, &centroids);
+      iterations = k_means_cuda(n_points, points, &opts, point_cluster_ids, &centroids, &per_iteration_time);
 
       DEBUG_OUT("Finished k_means_cuda:");
+      break;
+    case 3:
+      DEBUG_OUT("Running k_means_cuda shmem:");
+
+      iterations = k_means_cuda(n_points, points, &opts, point_cluster_ids, &centroids, &per_iteration_time);
+
+      DEBUG_OUT("Finished k_means_cuda shmem:");
       break;
   }
 
   //End timer and print out elapsed
   auto end = std::chrono::high_resolution_clock::now();
   auto diff = std::chrono::duration<double, std::milli>(end - start);
-  printf("%d,%lf\n", iterations, diff.count() / iterations);
+
+  if (opts.algorithm == 0) {
+    per_iteration_time = diff.count() / iterations;
+  }
+  else {
+    TIMING_PRINT(printf("Per iteration chrono: %f ms \n", diff.count() / iterations));
+  }
+
+  printf("%d,%lf\n", iterations, per_iteration_time);
 
   if (opts.print_centroids) {
     PRINT_CENTROIDS(centroids, opts.dimensions, opts.n_clusters);

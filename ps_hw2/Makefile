@@ -13,5 +13,8 @@ compile:
 debug:
 	$(CC) $(SRCS) $(OPTS) -DDEBUG -I$(INC) -o $(EXEC) -g
 
+timing:
+	$(CC) $(SRCS) $(OPTS) -DTIMING -I$(INC) -o $(EXEC) -g
+
 clean:
 	rm -f $(EXEC)

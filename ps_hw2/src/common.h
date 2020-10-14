@@ -4,18 +4,24 @@
 #include <cstring>
 #include <stdlib.h>
 
+#ifdef TIMING
+#define TIMING_TEST 1
+#else
+#define TIMING_TEST 0
+#endif
+
 #ifdef DEBUG
 #define DEBUG_TEST 1
 #else
 #define DEBUG_TEST 0
 #endif
 
+#define TIMING_OUT(x) do { if (DEBUG_TEST) { std::cerr << "TIMING: " << (x) << std::endl;} } while (0)
+#define TIMING_PRINT(x) do { if (TIMING_TEST) { printf("TIMING: "); x;} } while (0)
 #define DEBUG_OUT(x) do { if (DEBUG_TEST) { std::cerr << "DEBUG: " << (x) << std::endl;} } while (0)
 #define DEBUG_PRINT(x) do { if (DEBUG_TEST) { printf("DEBUG: "); x;} } while (0)
 
 #define POW2(x) (x)*(x)
-
-#define REAL_FLOAT 1
 
 #ifdef REAL_FLOAT
 using real = float;

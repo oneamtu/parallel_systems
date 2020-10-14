@@ -160,7 +160,7 @@ struct l1_op : public thrust::unary_function<bool, two_realz> {
 };
 
 int k_means_thrust(int n_points, real *points, struct options_t *opts,
-  int* point_cluster_ids, real** centroids) {
+  int* point_cluster_ids, real** centroids, double *per_iteration_time) {
 
   using namespace thrust;
 
@@ -172,9 +172,29 @@ int k_means_thrust(int n_points, real *points, struct options_t *opts,
   int k = opts->n_clusters;
   int d = opts->dimensions;
 
+  cudaEvent_t start, stop, in_start, in_stop, out_start, out_stop;
+
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+  cudaEventCreate(&in_start);
+  cudaEventCreate(&in_stop);
+  cudaEventCreate(&out_start);
+  cudaEventCreate(&out_stop);
+
+  // timer code - 0_Simple/simpleMultiCopy/simpleMultiCopy.cu
+  cudaEventRecord(in_start, 0);
+
   dv_real d_points(points, points + n_points * d);
 
   dv_real old_centroids(*centroids, *centroids + k * d);
+
+  cudaEventRecord(in_stop,0);
+  cudaEventSynchronize(in_stop);
+
+  float memcpy_h2d_time;
+  cudaEventElapsedTime(&memcpy_h2d_time, in_start, in_stop);
+  TIMING_PRINT(printf("Host to device: %f ms \n", memcpy_h2d_time));
+
   dv_real new_centroids(k * d);
 
   dv_real point_centroid_distances(n_points * k);
@@ -325,8 +345,27 @@ int k_means_thrust(int n_points, real *points, struct options_t *opts,
 
   DEBUG_OUT(iterations > opts->max_iterations ? "Max iterations reached!" : "Converged!" );
 
+  cudaEventRecord(out_start, 0);
+
   copy(old_centroids.begin(), old_centroids.end(), *centroids);
   copy(unsorted_d_point_cluster_ids.begin(), unsorted_d_point_cluster_ids.end(), point_cluster_ids);
+
+  cudaEventRecord(out_stop,0);
+  cudaEventSynchronize(out_stop);
+
+  float memcpy_d2h_time;
+  cudaEventElapsedTime(&memcpy_d2h_time, out_start, out_stop); //TODO: is async messing it up?
+  TIMING_PRINT(printf("Device to host: %f ms \n", memcpy_d2h_time));
+
+  cudaEventRecord(stop,0);
+  cudaEventSynchronize(stop);
+
+  float global_time;
+  cudaEventElapsedTime(&global_time, start, stop); //TODO: is async messing it up?
+  *per_iteration_time = (global_time/iterations);
+  TIMING_PRINT(printf("Overall: %f ms \n", global_time));
+  TIMING_PRINT(printf("Percent spent in IO: %f \n", (memcpy_d2h_time + memcpy_h2d_time) / global_time));
+  TIMING_PRINT(printf("Per iteration: %f ms \n", *per_iteration_time));
 
   return iterations;
 }
