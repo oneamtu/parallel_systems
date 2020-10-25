@@ -12,32 +12,74 @@ func min(a int, b int) int {
 	}
 }
 
-// func hashTree(trees []*Tree, queue <-chan int) {
-//   select c <-
-// }
+type TreeIdHash struct {
+	TreeId int
+	Hash   int
+}
+
+func hashWorker(trees []*Tree, treeIds <-chan int, treeIdHashes chan<- TreeIdHash) {
+	for treeId := range treeIds {
+		if treeIdHashes != nil {
+			treeIdHashes <- TreeIdHash{treeId, trees[treeId].Hash()}
+		} else {
+			// no map insert, just compute
+			trees[treeId].Hash()
+		}
+	}
+}
 
 func hashTreesParallel(trees []*Tree, hashWorkersCount int, dataWorkersCount int) HashGroups {
 	var treesByHash = make(HashGroups)
-	var wg sync.WaitGroup
-	hashBatchSize := len(trees)/hashWorkersCount + (min(len(trees)%hashWorkersCount, 1))
+	var hashWorkerWait sync.WaitGroup
+	treeIdsPerWorker := make([]chan int, hashWorkersCount)
+
+	for i := range treeIdsPerWorker {
+		treeIdsPerWorker[i] = make(chan int, len(trees)/hashWorkersCount)
+	}
+
+	var treeIdHashes chan TreeIdHash
+
+	if dataWorkersCount > 0 {
+		treeIdHashes = make(chan TreeIdHash, hashWorkersCount)
+	}
 
 	for i := 0; i < hashWorkersCount; i++ {
-		wg.Add(1)
+		hashWorkerWait.Add(1)
 
 		go func(i int) {
-			defer wg.Done()
+			defer hashWorkerWait.Done()
 
-			start := min(i*hashBatchSize, len(trees))
-			end := min((i+1)*hashBatchSize, len(trees))
-
-			for _, tree := range trees[start:end] {
-				tree.Hash()
-			}
-			// treesByHash[hash] = append(treesByHash[hash], i)
+			hashWorker(trees, treeIdsPerWorker[i], treeIdHashes)
 		}(i)
 	}
 
-	wg.Wait()
+	for i, _ := range trees {
+		treeIdsPerWorker[i%hashWorkersCount] <- i
+	}
+
+	for i := range treeIdsPerWorker {
+		close(treeIdsPerWorker[i])
+	}
+
+	var dataWorkerWait sync.WaitGroup
+
+	for j := 0; j < dataWorkersCount; j++ {
+		dataWorkerWait.Add(1)
+
+		go func() {
+			defer dataWorkerWait.Done()
+
+			for treeIdHash := range treeIdHashes {
+				treesByHash[treeIdHash.Hash] = append(treesByHash[treeIdHash.Hash], treeIdHash.TreeId)
+			}
+		}()
+	}
+
+	hashWorkerWait.Wait()
+
+	close(treeIdHashes)
+
+	dataWorkerWait.Wait()
 
 	return treesByHash
 }
