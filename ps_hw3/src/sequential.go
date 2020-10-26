@@ -1,12 +1,13 @@
 package main
 
+//TODO: can memory pre-allocate treesByHash
 func hashTreesSequential(trees []*Tree, updateMap bool) HashGroups {
 	var treesByHash = make(HashGroups)
 
-	for i, tree := range trees {
+	for treeId, tree := range trees {
 		hash := tree.Hash()
 		if updateMap {
-			treesByHash[hash] = append(treesByHash[hash], i)
+			treesByHash[hash] = append(treesByHash[hash], treeId)
 		}
 	}
 	return treesByHash

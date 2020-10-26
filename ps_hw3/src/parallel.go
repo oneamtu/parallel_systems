@@ -17,10 +17,18 @@ type TreeIdHash struct {
 	Hash   int
 }
 
-func hashWorker(trees []*Tree, treeIds <-chan int, treeIdHashes chan<- TreeIdHash) {
+var globalHashLock sync.Mutex
+
+func hashWorker(trees []*Tree, treesByHash HashGroups,
+	treeIds <-chan int, treeIdHashes chan<- TreeIdHash, writeMapWithLock bool) {
 	for treeId := range treeIds {
 		if treeIdHashes != nil {
 			treeIdHashes <- TreeIdHash{treeId, trees[treeId].Hash()}
+		} else if writeMapWithLock {
+			globalHashLock.Lock()
+			hash := trees[treeId].Hash()
+			treesByHash[hash] = append(treesByHash[hash], treeId)
+			globalHashLock.Unlock()
 		} else {
 			// no map insert, just compute
 			trees[treeId].Hash()
@@ -28,56 +36,59 @@ func hashWorker(trees []*Tree, treeIds <-chan int, treeIdHashes chan<- TreeIdHas
 	}
 }
 
+//TODO: can memory pre-allocate treesByHash
 func hashTreesParallel(trees []*Tree, hashWorkersCount int, dataWorkersCount int) HashGroups {
 	var treesByHash = make(HashGroups)
 	var hashWorkerWait sync.WaitGroup
-	treeIdsPerWorker := make([]chan int, hashWorkersCount)
+	writeMapWithLock := dataWorkersCount == hashWorkersCount
 
-	for i := range treeIdsPerWorker {
-		treeIdsPerWorker[i] = make(chan int, len(trees)/hashWorkersCount)
+	var treeIdHashes []chan TreeIdHash
+	if dataWorkersCount > 0 && !writeMapWithLock {
+		treeIdHashes = make([]chan TreeIdHash, dataWorkersCount)
+		for j := range treeIdHashes {
+			//TODO: multiply by a constant?
+			treeIdHashes[j] = make(chan TreeIdHash, hashWorkersCount*10)
+		}
 	}
 
-	var treeIdHashes chan TreeIdHash
-
-	if dataWorkersCount > 0 {
-		treeIdHashes = make(chan TreeIdHash, hashWorkersCount)
-	}
-
+	//start workers
 	for i := 0; i < hashWorkersCount; i++ {
 		hashWorkerWait.Add(1)
 
 		go func(i int) {
 			defer hashWorkerWait.Done()
 
-			hashWorker(trees, treeIdsPerWorker[i], treeIdHashes)
+			if dataWorkersCount == 0 || writeMapWithLock {
+				hashWorker(trees, treesByHash, treeIdsPerWorker[i], nil, writeMapWithLock)
+			} else {
+				hashWorker(trees, treesByHash, treeIdsPerWorker[i], treeIdHashes[i%dataWorkersCount], writeMapWithLock)
+			}
 		}(i)
-	}
-
-	for i, _ := range trees {
-		treeIdsPerWorker[i%hashWorkersCount] <- i
-	}
-
-	for i := range treeIdsPerWorker {
-		close(treeIdsPerWorker[i])
 	}
 
 	var dataWorkerWait sync.WaitGroup
 
-	for j := 0; j < dataWorkersCount; j++ {
-		dataWorkerWait.Add(1)
+	//start data workers
+	if dataWorkersCount > 0 && !writeMapWithLock {
+		for j := 0; j < dataWorkersCount; j++ {
+			dataWorkerWait.Add(1)
 
-		go func() {
-			defer dataWorkerWait.Done()
+			go func(j int) {
+				defer dataWorkerWait.Done()
 
-			for treeIdHash := range treeIdHashes {
-				treesByHash[treeIdHash.Hash] = append(treesByHash[treeIdHash.Hash], treeIdHash.TreeId)
-			}
-		}()
+				for treeIdHash := range treeIdHashes[j] {
+					//TODO: synchronize via mutex
+					treesByHash[treeIdHash.Hash] = append(treesByHash[treeIdHash.Hash], treeIdHash.TreeId)
+				}
+			}(j)
+		}
 	}
 
 	hashWorkerWait.Wait()
 
-	close(treeIdHashes)
+	for j := range treeIdHashes {
+		close(treeIdHashes[j])
+	}
 
 	dataWorkerWait.Wait()
 

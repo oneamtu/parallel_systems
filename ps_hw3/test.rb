@@ -6,13 +6,15 @@ require 'pry'
 require 'pry-rescue'
 require 'pry-byebug'
 require 'rspec/expectations'
+require 'descriptive_statistics'
 
 include RSpec::Matchers
 
 def run(input, hash_workers: 1, data_workers: 0, comp_workers: 0)
   command = "go run src/*.go --input=#{input} --hash-workers=#{hash_workers}\
-    --comp-workers=#{comp_workers} --data-workers=#{data_workers}"
+    --comp-workers=#{comp_workers} --data-workers=#{data_workers} 2>&1"
 
+  puts command
   %x(#{command})
 end
 
@@ -83,14 +85,36 @@ def hash_timings
     ["input/coarse.txt", "input/fine.txt"].each do |input|
       size = %x(wc -l #{input}).to_i
 
-      (0..Math.log(size).ceil.to_i).each do |i|
+      (0..Math.log(size, 2).ceil.to_i).each do |i|
         hash_workers = [1 << i, size].min
 
-        time = 10.times.map do
-          BigDecimal(run(input, hash_workers: hash_workers).scan(/\d+\.\d+/).first)
-        end.sum / 10
+        time_mean, time_stddev = 20.times.map do
+          output = run(input, hash_workers: hash_workers).scan(/\d+\.\d+/).first
+          puts output
+          BigDecimal(output)
+        end.then { [_1.mean, _1.standard_deviation] }
 
-        f.puts "#{input}, #{hash_workers}, #{time.to_s("F")}"
+        f.puts "#{input}, #{hash_workers}, #{time_mean}, #{time_stddev}"
+      end
+    end
+  end
+end
+
+HASH_WORKERS=4
+
+def hash_group_timings
+  File.open("timings/hash_group_times.csv", "w") do |f|
+    ["input/coarse.txt", "input/fine.txt"].each do |input|
+      size = %x(wc -l #{input}).to_i
+
+      [[1, 1], [HASH_WORKERS, 1], [HASH_WORKERS, HASH_WORKERS]].each do |hash_workers, data_workers|
+        time_mean, time_stddev = 20.times.map do
+          output = run(input, hash_workers: hash_workers, data_workers: data_workers).scan(/hashGroupTime: \d+\.\d+/).first
+          puts output
+          BigDecimal(output)
+        end.then { [_1.mean, _1.standard_deviation] }
+
+        f.puts "#{input}, #{hash_workers}, #{data_workers}, #{time_mean}, #{time_stddev}"
       end
     end
   end
@@ -101,10 +125,11 @@ def test_correctness
     answer = "answers/#{Pathname.new(input).basename.to_s.split(".").first}.ref"
     gen_test(input, answer) unless File.exist?(answer)
 
+    # compare_correctness(run(input, hash_workers: 1, data_workers: 1, comp_workers: 1), File.read(answer))
     compare_correctness(run(input, hash_workers: 1, data_workers: 1, comp_workers: 1), File.read(answer))
   end
 end
 
 # test_format
-# test_correctness
+test_correctness
 hash_timings
