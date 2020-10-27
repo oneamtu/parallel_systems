@@ -21,19 +21,22 @@ func (tree *Tree) String() string {
 	return strings.Join(v_s, " ")
 }
 
-func (tree *Tree) Hash() (hash int) {
-	hash = 1
-	for v := range tree.DepthFirst() {
-		hash = (hash*(v+2) + (v + 2)) % 1000
+func (tree *Tree) Hash(prev_hash int) int {
+	if tree == nil {
+		return prev_hash
 	}
-	return
+	hash := tree.Left.Hash(prev_hash)
+	hash = (hash*(tree.Value+2) + (tree.Value + 2)) % 1000
+	return tree.Right.Hash(hash)
 }
 
 func (tree *Tree) depthFirstFill(values *[]int) {
-	for v := range tree.DepthFirst() {
-		*values = append(*values, v)
+	if tree == nil {
+		return
 	}
-	return
+	tree.Left.depthFirstFill(values)
+	*values = append(*values, tree.Value)
+	tree.Right.depthFirstFill(values)
 }
 
 func (tree *Tree) depthFirst(c chan int) {
@@ -46,6 +49,7 @@ func (tree *Tree) depthFirst(c chan int) {
 }
 
 func (tree *Tree) DepthFirst() <-chan int {
+	//TODO: buffered?
 	c := make(chan int)
 	go func() {
 		tree.depthFirst(c)

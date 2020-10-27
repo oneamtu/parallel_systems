@@ -5,7 +5,7 @@ func hashTreesSequential(trees []*Tree, updateMap bool) HashGroups {
 	var treesByHash = make(HashGroups)
 
 	for treeId, tree := range trees {
-		hash := tree.Hash()
+		hash := tree.Hash(1)
 		if updateMap {
 			treesByHash[hash] = append(treesByHash[hash], treeId)
 		}
@@ -38,23 +38,30 @@ func compareTreesSequential(hashGroup HashGroups, trees []*Tree) IdGroups {
 	var idGroups IdGroups
 
 	for _, treeIndexes := range hashGroup {
+		// println(hash, treeIndexes)
+
 		if len(treeIndexes) > 1 {
 			skipIds := make([]bool, len(treeIndexes))
-			eqIds := make([]int, 0, len(treeIndexes))
 
 			for i := range skipIds {
 				skipIds[i] = false
 			}
 
 			for i, treeI := range treeIndexes {
+				var eqIds []int
 
 				if skipIds[i] {
 					continue
 				}
 
 				for j, treeJ := range treeIndexes[i+1:] {
+					// println("DEBUG:", treeI, "check", treeJ)
+					if treeI == 1000 {
+						// println("DEBUG:", trees[treeI].String(), "vs.", trees[treeJ])
+					}
 					if treesEqualSequential(trees[treeI], trees[treeJ]) {
-						skipIds[j] = true
+						// println("DEBUG:", treeI, "equal", treeJ)
+						skipIds[i+1+j] = true
 						eqIds = append(eqIds, treeJ)
 					}
 				}
@@ -62,7 +69,6 @@ func compareTreesSequential(hashGroup HashGroups, trees []*Tree) IdGroups {
 				if len(eqIds) > 0 {
 					eqIds = append(eqIds, treeI)
 					idGroups = append(idGroups, eqIds)
-					eqIds = make([]int, 0, len(treeIndexes))
 				}
 			}
 		}

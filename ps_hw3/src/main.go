@@ -1,12 +1,6 @@
 //TODO You should submit your code and report packaged into a tar file on Canvas. If you do not complete the optional implementation in step 2.2, name your main go program BST.go. If you do complete it, name it BST_opt.go instead.
 
 //TODO:
-//timing
-//seq hash comp
-//ruby test/data
-//parallel hash
-//parallel data
-//parallel barrier
 //parallel comp
 //opt/fine-grained
 
