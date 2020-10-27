@@ -10,9 +10,9 @@ require 'descriptive_statistics'
 
 include RSpec::Matchers
 
-def run(input, hash_workers: 1, data_workers: 0, comp_workers: 0)
+def run(input, hash_workers: 1, data_workers: 0, comp_workers: 0, buffered: false)
   command = "go run src/*.go --input=#{input} --hash-workers=#{hash_workers}\
-    --comp-workers=#{comp_workers} --data-workers=#{data_workers} 2>debug.log"
+    --comp-workers=#{comp_workers} --data-workers=#{data_workers} --buffered=#{buffered} 2>debug.log"
 
   puts command
   %x(#{command})
@@ -103,25 +103,34 @@ def hash_timings
   end
 end
 
-HASH_WORKERS=4
+HASH_WORKERS=32
 
 def hash_group_timings
   File.open("timings/hash_group_times.csv", "w") do |f|
     ["input/coarse.txt", "input/fine.txt"].each do |input|
-      size = %x(wc -l #{input}).to_i
-
-      [[1, 1], [HASH_WORKERS, 1], [HASH_WORKERS, HASH_WORKERS]].each do |hash_workers, data_workers|
+      [[1, 1, true],
+       [HASH_WORKERS, 1, false],
+       [HASH_WORKERS, 1, true],
+       [HASH_WORKERS, HASH_WORKERS, true]].each do |hash_workers, data_workers, buffered|
         time_mean, time_stddev = 20.times.map do
-          output = run(input, hash_workers: hash_workers, data_workers: data_workers).scan(/hashGroupTime: \d+\.?\d+/).first
+          output = run(input, hash_workers: hash_workers, data_workers: data_workers, buffered: buffered)
+            .scan(/hashGroupTime: (\d+\.?\d+)/).first
           puts output
-          BigDecimal(output)
+          BigDecimal(output.first)
         end.then { [_1.mean, _1.standard_deviation] }
 
-        f.puts "#{input}, #{hash_workers}, #{data_workers}, #{time_mean}, #{time_stddev}"
+        if buffered
+          f.puts "#{input}, #{hash_workers}, #{data_workers}, #{time_mean}, #{time_stddev}"
+        else
+          f.puts "#{input}-unbuffered, #{hash_workers}, #{data_workers}, #{time_mean}, #{time_stddev}"
+        end
       end
     end
   end
 end
+
+# possible j values include 2, 4, 8, 16.
+# Possible comp-workers values include 1,2,4,8,16.
 
 def test_correctness
   Dir["input/*.txt"].each do |input|
@@ -129,13 +138,13 @@ def test_correctness
     gen_test(input, answer) unless File.exist?(answer)
 
     # compare_correctness(run(input, hash_workers: 1, data_workers: 1, comp_workers: 1), File.read(answer))
-    compare_correctness(run(input, hash_workers: 4, data_workers: 1, comp_workers: 1), File.read(answer))
-    compare_correctness(run(input, hash_workers: 4, data_workers: 4, comp_workers: 1), File.read(answer))
+    compare_correctness(run(input, hash_workers: HASH_WORKERS, data_workers: 1, comp_workers: 1), File.read(answer))
+    compare_correctness(run(input, hash_workers: HASH_WORKERS, data_workers: HASH_WORKERS, comp_workers: 1), File.read(answer))
     # TODO compare_correctness(run(input, hash_workers: 4, data_workers: 1, comp_workers: 2), File.read(answer))
   end
 end
 
 # test_format
 # test_correctness
-hash_timings
-# hash_group_timings
+# hash_timings
+hash_group_timings

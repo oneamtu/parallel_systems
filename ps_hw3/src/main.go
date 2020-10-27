@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime/pprof"
 	"time"
 )
 
@@ -45,11 +46,22 @@ func main() {
 	dataWorkersCount := flag.Int("data-workers", 0, "integer-valued number of threads")
 	compWorkersCount := flag.Int("comp-workers", 0, "integer-valued number of threads")
 	inputFile := flag.String("input", "", "input file")
+	buffered := flag.Bool("buffered", true, "use a buffered channel for data-worker writes")
+	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to file")
 
 	flag.Parse()
 
 	if *inputFile == "" {
 		log.Fatal("input file cannot be blank!")
+	}
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
 	}
 
 	trees := ReadTrees(inputFile)
@@ -61,7 +73,7 @@ func main() {
 	if *hashWorkersCount == 1 {
 		hashGroups = hashTreesSequential(trees, *dataWorkersCount == 1)
 	} else {
-		hashGroups = hashTreesParallel(trees, *hashWorkersCount, *dataWorkersCount)
+		hashGroups = hashTreesParallel(trees, *hashWorkersCount, *dataWorkersCount, *buffered)
 	}
 
 	elapsed := time.Since(start)
@@ -75,7 +87,7 @@ func main() {
 	hashGroups.Print()
 
 	if *compWorkersCount == 0 {
-		os.Exit(0)
+		return
 	}
 
 	start = time.Now()

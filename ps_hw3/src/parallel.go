@@ -38,7 +38,7 @@ func hashWorker(trees []*Tree, start int, end int, treesByHash HashGroups,
 }
 
 //TODO: can memory pre-allocate treesByHash
-func hashTreesParallel(trees []*Tree, hashWorkersCount int, dataWorkersCount int) HashGroups {
+func hashTreesParallel(trees []*Tree, hashWorkersCount int, dataWorkersCount int, buffered bool) HashGroups {
 	var treesByHash = make(HashGroups)
 	var hashWorkerWait sync.WaitGroup
 	writeMapWithLock := dataWorkersCount == hashWorkersCount
@@ -48,7 +48,11 @@ func hashTreesParallel(trees []*Tree, hashWorkersCount int, dataWorkersCount int
 	if dataWorkersCount > 0 && !writeMapWithLock {
 		treeIdHashes = make([]chan TreeIdHash, dataWorkersCount)
 		for j := range treeIdHashes {
-			treeIdHashes[j] = make(chan TreeIdHash, hashWorkersCount*10)
+			if buffered {
+				treeIdHashes[j] = make(chan TreeIdHash, hashWorkersCount*10)
+			} else {
+				treeIdHashes[j] = make(chan TreeIdHash)
+			}
 		}
 	}
 
