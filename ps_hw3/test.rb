@@ -12,12 +12,15 @@ include RSpec::Matchers
 
 DECIMAL="\\d+\\.?\\d+e?\\+?\\d{2}?"
 
-def run(input, hash_workers: 1, data_workers: 0, comp_workers: 0, buffered: false)
+def run(input, hash_workers: 1, data_workers: 0, comp_workers: 0, comp_buffered: nil, data_buffered: nil, data_use_channels: nil)
   command = "go run src/*.go --input=#{input} --hash-workers=#{hash_workers}\
-    --comp-workers=#{comp_workers} --data-workers=#{data_workers} --buffered=#{buffered} 2>debug.log"
+    --comp-workers=#{comp_workers} --data-workers=#{data_workers} 2>debug.log"
+  command += "--data-buffered=#{data_buffered}" if data_buffered != nil
+  command += "--data-use-channels=#{data_use_channels}" if data_use_channels != nil
+  command += "--comp-buffered=#{comp_buffered}" if comp_buffered != nil
 
   puts command
-  %x(#{command})
+  %x(#{command} 2>debug.log)
 end
 
 def gen_test(input, answer)
@@ -63,7 +66,7 @@ def compare_correctness(output, target)
   hash_output = output.split("\n")[1..].take_while { _1.match?(/\A\d{1,3}:/) }
   hash_target = target.split("\n")[1..].take_while { _1.match?(/\A\d{1,3}:/) }
 
-  expect(hash_output.size?).to expect(hash_target.size)
+  expect(hash_output.size).to eq(hash_target.size)
 
   hash_output.sort.zip(hash_target.sort).each do |o_row, t_row|
     split_o_row = o_row.split(" ")
@@ -79,7 +82,7 @@ def compare_correctness(output, target)
   group_output.map! { _1.split(" ")[2..].sort! }
   group_target.map! { _1.split(" ")[2..].sort! }
 
-  expect(group_output.size?).to expect(group_target.size)
+  expect(group_output.size).to eq(group_target.size)
 
   group_output.sort.zip(group_target.sort).each do |o_row, t_row|
     expect(o_row).to eq(t_row)
@@ -109,26 +112,35 @@ def hash_timings
   end
 end
 
-HASH_WORKERS=4
+HASH_WORKERS=32
 
 def hash_group_timings
   File.open("timings/hash_group_times.csv", "w") do |f|
     ["input/coarse.txt", "input/fine.txt"].each do |input|
-      [[1, 1, true],
-       [HASH_WORKERS, 1, false],
-       [HASH_WORKERS, 1, true],
-       [HASH_WORKERS, HASH_WORKERS, true]].each do |hash_workers, data_workers, buffered|
+      [[1, 1, true, false],
+       [HASH_WORKERS, 1, false, true],
+       [HASH_WORKERS, 4, true, true],
+       [HASH_WORKERS, 16, true, true],
+       [HASH_WORKERS, 4, true, false],
+       [HASH_WORKERS, 16, true, false],
+       [HASH_WORKERS, HASH_WORKERS, true, false]].each do |hash_workers, data_workers, buffered, data_use_channels|
         time_mean, time_stddev = 20.times.map do
-          output = run(input, hash_workers: hash_workers, data_workers: data_workers, buffered: buffered)
+          output = run(
+            input,
+            hash_workers: hash_workers,
+            data_workers: data_workers,
+            data_buffered: buffered,
+            data_use_channels: data_use_channels
+          )
             .scan(/hashGroupTime: (#{DECIMAL})/).first
           puts output
           BigDecimal(output.first)
         end.then { [_1.mean, _1.standard_deviation] }
 
         if buffered
-          f.puts "#{input}, #{hash_workers}, #{data_workers}, #{time_mean}, #{time_stddev}"
+          f.puts "#{input}, #{hash_workers}, #{data_workers}, #{data_use_channels}, #{time_mean}, #{time_stddev}"
         else
-          f.puts "#{input}-unbuffered, #{hash_workers}, #{data_workers}, #{time_mean}, #{time_stddev}"
+          f.puts "#{input}-unbuffered, #{hash_workers}, #{data_workers}, #{data_use_channels}, #{time_mean}, #{time_stddev}"
         end
       end
     end
@@ -140,7 +152,7 @@ def compare_tree_timings
     ["input/coarse.txt", "input/fine.txt"].each do |input|
       [[1, true], [2, true], [2, false], [4, true], [8, true], [16, true]].each do |comp_workers, buffered|
         time_mean, time_stddev = 20.times.map do
-          output = run(input, hash_workers: HASH_WORKERS, data_workers: 1, comp_workers: comp_workers)
+          output = run(input, hash_workers: HASH_WORKERS, data_workers: 1, comp_workers: comp_workers, comp_buffered: buffered)
             .scan(/compareTreeTime: (#{DECIMAL})/).first
           puts output
           BigDecimal(output.first)
@@ -165,15 +177,55 @@ def test_correctness
     gen_test(input, answer) unless File.exist?(answer)
 
     # compare_correctness(run(input, hash_workers: 1, data_workers: 1, comp_workers: 1), File.read(answer))
-    compare_correctness(run(input, hash_workers: HASH_WORKERS, data_workers: 1, comp_workers: 1), File.read(answer))
-    compare_correctness(run(input, hash_workers: HASH_WORKERS, data_workers: HASH_WORKERS, comp_workers: 1), File.read(answer))
-    compare_correctness(run(input, hash_workers: HASH_WORKERS, data_workers: 1, comp_workers: 4), File.read(answer))
-    compare_correctness(run(input, hash_workers: HASH_WORKERS, data_workers: 1, comp_workers: 4, buffered: true), File.read(answer))
+    compare_correctness(
+      run(input,
+          hash_workers: HASH_WORKERS,
+          data_workers: 1,
+          comp_workers: 1),
+          File.read(answer)
+    )
+    compare_correctness(
+      run(input,
+          hash_workers: HASH_WORKERS,
+          data_workers: HASH_WORKERS,
+          comp_workers: 1),
+          File.read(answer)
+    )
+    compare_correctness(
+      run(input,
+          hash_workers: HASH_WORKERS,
+          data_workers: HASH_WORKERS/2,
+          comp_workers: 1),
+          File.read(answer)
+    )
+    compare_correctness(
+      run(input,
+          hash_workers: HASH_WORKERS,
+          data_workers: HASH_WORKERS/2,
+          comp_workers: 1,
+          data_use_channels: true),
+          File.read(answer)
+    )
+    compare_correctness(
+      run(input,
+          hash_workers: HASH_WORKERS,
+          data_workers: 1,
+          comp_workers: 4),
+          File.read(answer)
+    )
+    compare_correctness(
+      run(input,
+          hash_workers: HASH_WORKERS,
+          data_workers: 1,
+          comp_workers: 4,
+          comp_buffered: true),
+          File.read(answer)
+    )
   end
 end
 
 test_format
 test_correctness
 # hash_timings
-# hash_group_timings
+hash_group_timings
 compare_tree_timings

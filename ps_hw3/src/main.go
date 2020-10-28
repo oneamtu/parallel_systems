@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-type HashGroups map[int][]int
+type HashGroups [][]int
 
 func (hashGroups *HashGroups) Print() {
 	for hash, treeIndexes := range *hashGroups {
@@ -79,7 +79,9 @@ func main() {
 	dataWorkersCount := flag.Int("data-workers", 0, "integer-valued number of threads")
 	compWorkersCount := flag.Int("comp-workers", 0, "integer-valued number of threads")
 	inputFile := flag.String("input", "", "input file")
-	buffered := flag.Bool("buffered", true, "use a buffered channel for data-worker writes")
+	dataUseChannels := flag.Bool("data-use-channels", false, "use channels for fine-grained control when data-workeds < hash-workers")
+	dataBuffered := flag.Bool("data-buffered", true, "use a buffered channel for data-worker writes")
+	compBuffered := flag.Bool("comp-buffered", true, "use a custom work queue for comp-worker jobs")
 	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to file")
 
 	flag.Parse()
@@ -106,7 +108,7 @@ func main() {
 	if *hashWorkersCount == 1 {
 		hashGroups = hashTreesSequential(trees, *dataWorkersCount == 1)
 	} else {
-		hashGroups = hashTreesParallel(trees, *hashWorkersCount, *dataWorkersCount, *buffered)
+		hashGroups = hashTreesParallel(trees, *hashWorkersCount, *dataWorkersCount, *dataBuffered, *dataUseChannels)
 	}
 
 	elapsed := time.Since(start)
@@ -129,7 +131,7 @@ func main() {
 
 	if *compWorkersCount == 1 {
 		comparisonGroups = compareTreesSequential(hashGroups, trees)
-	} else if *buffered {
+	} else if *compBuffered {
 		comparisonGroups = compareTreesParallel(hashGroups, trees, *compWorkersCount)
 	} else {
 		comparisonGroups = compareTreesParallelUnbuffered(hashGroups, trees)

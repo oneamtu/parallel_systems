@@ -2,7 +2,7 @@ package main
 
 //TODO: can memory pre-allocate treesByHash
 func hashTreesSequential(trees []*Tree, updateMap bool) HashGroups {
-	var treesByHash = make(HashGroups)
+	var treesByHash = make(HashGroups, 1000) // up to 1000 potential hashes
 
 	for treeId, tree := range trees {
 		hash := tree.Hash(1)
@@ -13,8 +13,6 @@ func hashTreesSequential(trees []*Tree, updateMap bool) HashGroups {
 	return treesByHash
 }
 
-//TODO: can memory pre-allocate/optimize
-//idea 1: pre-allocate new array at treeIndex size (or just max treeIndex & wipe)
 func compareTreesSequential(hashGroup HashGroups, trees []*Tree) ComparisonGroups {
 	var comparisonGroups ComparisonGroups
 	comparisonGroups.Matrixes = make(map[int]AdjacencyMatrix)

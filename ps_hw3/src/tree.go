@@ -30,6 +30,32 @@ func (tree *Tree) Hash(prev_hash int) int {
 	return tree.Right.Hash(hash)
 }
 
+func (tree *Tree) HashUnrolled() int {
+	hash := 1
+
+	var tree_stack []*Tree
+
+	tree_it := tree
+
+	for len(tree_stack) != 0 || tree_it != nil {
+		//bear left
+		for ; tree_it != nil; tree_it = tree_it.Left {
+			tree_stack = append(tree_stack, tree_it)
+			// println("1:", tree_1_it.String())
+		}
+
+		//pop the stack
+		tree_it = tree_stack[len(tree_stack)-1]
+		tree_stack = tree_stack[:len(tree_stack)-1]
+
+		// println("pop:", tree_1_it.Value, tree_2_it.Value)
+		hash = (hash*(tree_it.Value+2) + (tree_it.Value + 2)) % 1000
+
+		tree_it = tree_it.Right
+	}
+	return hash
+}
+
 //TODO: pre-alloc stack sizes?
 func treesEqualSequential(tree_1 *Tree, tree_2 *Tree) bool {
 	var tree_1_stack []*Tree
