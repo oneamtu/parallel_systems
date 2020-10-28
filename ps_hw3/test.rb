@@ -14,13 +14,14 @@ DECIMAL="\\d+\\.?\\d+e?\\+?\\d{2}?"
 
 def run(input, hash_workers: 1, data_workers: 0, comp_workers: 0, comp_buffered: nil, data_buffered: nil, data_use_channels: nil)
   command = "go run src/*.go --input=#{input} --hash-workers=#{hash_workers}\
-    --comp-workers=#{comp_workers} --data-workers=#{data_workers} 2>debug.log"
-  command += "--data-buffered=#{data_buffered}" if data_buffered != nil
-  command += "--data-use-channels=#{data_use_channels}" if data_use_channels != nil
-  command += "--comp-buffered=#{comp_buffered}" if comp_buffered != nil
+    --comp-workers=#{comp_workers} --data-workers=#{data_workers} "
+  command += " --data-buffered=#{data_buffered}" if data_buffered != nil
+  command += " --data-use-channels=#{data_use_channels}" if data_use_channels != nil
+  command += " --comp-buffered=#{comp_buffered}" if comp_buffered != nil
+  command += " 2>debug.log"
 
   puts command
-  %x(#{command} 2>debug.log)
+  %x(#{command})
 end
 
 def gen_test(input, answer)

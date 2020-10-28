@@ -1,10 +1,5 @@
 //TODO You should submit your code and report packaged into a tar file on Canvas. If you do not complete the optional implementation in step 2.2, name your main go program BST.go. If you do complete it, name it BST_opt.go instead.
 
-//TODO:
-//buffer parallel comp
-//opt/fine-grained
-//unroll hash
-
 package main
 
 import (
