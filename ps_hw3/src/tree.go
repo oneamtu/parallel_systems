@@ -30,13 +30,50 @@ func (tree *Tree) Hash(prev_hash int) int {
 	return tree.Right.Hash(hash)
 }
 
-func (tree *Tree) depthFirstFill(values *[]int) {
-	if tree == nil {
-		return
+//TODO: pre-alloc stack sizes?
+func treesEqualSequential(tree_1 *Tree, tree_2 *Tree) bool {
+	var tree_1_stack []*Tree
+	var tree_2_stack []*Tree
+
+	tree_1_it := tree_1
+	tree_2_it := tree_2
+
+	for (len(tree_1_stack) != 0 || len(tree_2_stack) != 0) ||
+		(tree_1_it != nil || tree_2_it != nil) {
+
+		//bear left
+		for ; tree_1_it != nil; tree_1_it = tree_1_it.Left {
+			tree_1_stack = append(tree_1_stack, tree_1_it)
+			// println("1:", tree_1_it.String())
+		}
+		for ; tree_2_it != nil; tree_2_it = tree_2_it.Left {
+			tree_2_stack = append(tree_2_stack, tree_2_it)
+			// println("2:", tree_2_it.String())
+		}
+
+		//pop the stack
+		tree_1_it = tree_1_stack[len(tree_1_stack)-1]
+		tree_1_stack = tree_1_stack[:len(tree_1_stack)-1]
+		tree_2_it = tree_2_stack[len(tree_2_stack)-1]
+		tree_2_stack = tree_2_stack[:len(tree_2_stack)-1]
+
+		// println("pop:", tree_1_it.Value, tree_2_it.Value)
+		if tree_1_it.Value != tree_2_it.Value {
+			return false
+		}
+
+		tree_1_it = tree_1_it.Right
+		tree_2_it = tree_2_it.Right
 	}
-	tree.Left.depthFirstFill(values)
-	*values = append(*values, tree.Value)
-	tree.Right.depthFirstFill(values)
+
+	// println("end:", len(tree_1_stack) != 0, len(tree_2_stack) != 0, tree_1_it != nil, tree_2_it != nil)
+	// false if there are more nodes on one side
+	if (len(tree_1_stack) != 0 || len(tree_2_stack) != 0) ||
+		(tree_1_it != nil || tree_2_it != nil) {
+		return false
+	}
+
+	return true
 }
 
 func (tree *Tree) depthFirst(c chan int) {
@@ -58,16 +95,21 @@ func (tree *Tree) DepthFirst() <-chan int {
 	return c
 }
 
-func insert(tree *Tree, number int) *Tree {
-	if tree == nil {
-		return &Tree{nil, number, nil}
-	}
+func insert(tree *Tree, number int) {
 	if number < tree.Value {
-		tree.Left = insert(tree.Left, number)
+		if tree.Left == nil {
+			tree.Left = &Tree{nil, number, nil}
+		} else {
+			insert(tree.Left, number)
+		}
 	} else {
-		tree.Right = insert(tree.Right, number)
+		if tree.Right == nil {
+			tree.Right = &Tree{nil, number, nil}
+		} else {
+			insert(tree.Right, number)
+		}
 	}
-	return tree
+	return
 }
 
 func ReadTrees(inputFile *string) []*Tree {
@@ -88,7 +130,11 @@ func ReadTrees(inputFile *string) []*Tree {
 			if err != nil {
 				log.Fatal(err)
 			}
-			root = insert(root, int(number))
+			if root == nil {
+				root = &Tree{nil, int(number), nil}
+			} else {
+				insert(root, int(number))
+			}
 		}
 		trees = append(trees, root)
 	}

@@ -13,65 +13,42 @@ func hashTreesSequential(trees []*Tree, updateMap bool) HashGroups {
 	return treesByHash
 }
 
-func treesEqualSequential(tree_1 *Tree, tree_2 *Tree) bool {
-	var values_1 []int
-	var values_2 []int
-
-	tree_1.depthFirstFill(&values_1)
-	tree_2.depthFirstFill(&values_2)
-
-	if len(values_1) != len(values_2) {
-		return false
-	}
-
-	for i, v := range values_1 {
-		if v != values_2[i] {
-			return false
-		}
-	}
-	return true
-}
-
 //TODO: can memory pre-allocate/optimize
 //idea 1: pre-allocate new array at treeIndex size (or just max treeIndex & wipe)
-func compareTreesSequential(hashGroup HashGroups, trees []*Tree) IdGroups {
-	var idGroups IdGroups
+func compareTreesSequential(hashGroup HashGroups, trees []*Tree) ComparisonGroups {
+	var comparisonGroups ComparisonGroups
+	comparisonGroups.Matrixes = make(map[int]AdjacencyMatrix)
+	comparisonGroups.SkipIds = make([]bool, len(trees))
 
-	for _, treeIndexes := range hashGroup {
-		// println(hash, treeIndexes)
+	for i := range comparisonGroups.SkipIds {
+		comparisonGroups.SkipIds[i] = false
+	}
 
+	for hash, treeIndexes := range hashGroup {
 		if len(treeIndexes) > 1 {
-			skipIds := make([]bool, len(treeIndexes))
+			n := len(treeIndexes)
+			matrix := AdjacencyMatrix{n, make([]bool, n*(n+1)/2)}
 
-			for i := range skipIds {
-				skipIds[i] = false
+			for i := range matrix.Values {
+				matrix.Values[i] = false
 			}
 
 			for i, treeI := range treeIndexes {
-				var eqIds []int
-
-				if skipIds[i] {
+				if comparisonGroups.SkipIds[treeI] {
 					continue
 				}
 
 				for j, treeJ := range treeIndexes[i+1:] {
-					// println("DEBUG:", treeI, "check", treeJ)
-					if treeI == 1000 {
-						// println("DEBUG:", trees[treeI].String(), "vs.", trees[treeJ])
-					}
-					if treesEqualSequential(trees[treeI], trees[treeJ]) {
+					if !comparisonGroups.SkipIds[treeJ] && treesEqualSequential(trees[treeI], trees[treeJ]) {
+						comparisonGroups.SkipIds[treeJ] = true
 						// println("DEBUG:", treeI, "equal", treeJ)
-						skipIds[i+1+j] = true
-						eqIds = append(eqIds, treeJ)
+						matrix.Values[i*(2*n-i+1)/2+j+1] = true
 					}
-				}
-
-				if len(eqIds) > 0 {
-					eqIds = append(eqIds, treeI)
-					idGroups = append(idGroups, eqIds)
 				}
 			}
+			comparisonGroups.Matrixes[hash] = matrix
 		}
 	}
-	return idGroups
+
+	return comparisonGroups
 }

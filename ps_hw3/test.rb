@@ -10,6 +10,8 @@ require 'descriptive_statistics'
 
 include RSpec::Matchers
 
+DECIMAL="\\d+\\.?\\d+e?\\+?\\d{2}?"
+
 def run(input, hash_workers: 1, data_workers: 0, comp_workers: 0, buffered: false)
   command = "go run src/*.go --input=#{input} --hash-workers=#{hash_workers}\
     --comp-workers=#{comp_workers} --data-workers=#{data_workers} --buffered=#{buffered} 2>debug.log"
@@ -44,7 +46,7 @@ def test_format
   expect(seq_hash_group.split("\n")[0]).to match(/\AhashGroupTime: \d+\.\d+µs/)
 
   par_hash_group = run(input, hash_workers: 2, data_workers: 2)
-  # expect(par_hash_group.split("\n").size).to eq(5) TODO
+  expect(par_hash_group.split("\n").size).to eq(5) #TODO
   expect(par_hash_group.split("\n")[0]).to match(/\AhashGroupTime: \d+\.\d+µs/)
 
   seq_comp_group = run(input, data_workers: 1, comp_workers: 1)
@@ -52,7 +54,7 @@ def test_format
   expect(seq_comp_group.split("\n")[0]).to match(/\AhashGroupTime: \d+\.\d+µs/)
 
   par_comp_group = run(input, hash_workers: 2, data_workers: 2, comp_workers: 2)
-  # expect(par_comp_group.split("\n").size).to eq(9) TODO
+  expect(par_comp_group.split("\n").size).to eq(9) #TODO
   expect(par_comp_group.split("\n")[0]).to match(/\AhashGroupTime: \d+\.\d+µs/)
   expect(par_comp_group.split("\n")[5]).to match(/\AcompareTreeTime: \d+\.\d+µs/)
 end
@@ -60,6 +62,8 @@ end
 def compare_correctness(output, target)
   hash_output = output.split("\n")[1..].take_while { _1.match?(/\A\d{1,3}:/) }
   hash_target = target.split("\n")[1..].take_while { _1.match?(/\A\d{1,3}:/) }
+
+  expect(hash_output.size?).to expect(hash_target.size)
 
   hash_output.sort.zip(hash_target.sort).each do |o_row, t_row|
     split_o_row = o_row.split(" ")
@@ -74,6 +78,8 @@ def compare_correctness(output, target)
 
   group_output.map! { _1.split(" ")[2..].sort! }
   group_target.map! { _1.split(" ")[2..].sort! }
+
+  expect(group_output.size?).to expect(group_target.size)
 
   group_output.sort.zip(group_target.sort).each do |o_row, t_row|
     expect(o_row).to eq(t_row)
@@ -103,7 +109,7 @@ def hash_timings
   end
 end
 
-HASH_WORKERS=32
+HASH_WORKERS=4
 
 def hash_group_timings
   File.open("timings/hash_group_times.csv", "w") do |f|
@@ -114,7 +120,7 @@ def hash_group_timings
        [HASH_WORKERS, HASH_WORKERS, true]].each do |hash_workers, data_workers, buffered|
         time_mean, time_stddev = 20.times.map do
           output = run(input, hash_workers: hash_workers, data_workers: data_workers, buffered: buffered)
-            .scan(/hashGroupTime: (\d+\.?\d+)/).first
+            .scan(/hashGroupTime: (#{DECIMAL})/).first
           puts output
           BigDecimal(output.first)
         end.then { [_1.mean, _1.standard_deviation] }
@@ -123,6 +129,27 @@ def hash_group_timings
           f.puts "#{input}, #{hash_workers}, #{data_workers}, #{time_mean}, #{time_stddev}"
         else
           f.puts "#{input}-unbuffered, #{hash_workers}, #{data_workers}, #{time_mean}, #{time_stddev}"
+        end
+      end
+    end
+  end
+end
+
+def compare_tree_timings
+  File.open("timings/compare_tree_times.csv", "w") do |f|
+    ["input/coarse.txt", "input/fine.txt"].each do |input|
+      [[1, true], [2, true], [2, false], [4, true], [8, true], [16, true]].each do |comp_workers, buffered|
+        time_mean, time_stddev = 20.times.map do
+          output = run(input, hash_workers: HASH_WORKERS, data_workers: 1, comp_workers: comp_workers)
+            .scan(/compareTreeTime: (#{DECIMAL})/).first
+          puts output
+          BigDecimal(output.first)
+        end.then { [_1.mean, _1.standard_deviation] }
+
+        if buffered
+          f.puts "#{input}, #{comp_workers}, #{time_mean}, #{time_stddev}"
+        else
+          f.puts "#{input}-unbuffered, #{comp_workers}, #{time_mean}, #{time_stddev}"
         end
       end
     end
@@ -140,11 +167,13 @@ def test_correctness
     # compare_correctness(run(input, hash_workers: 1, data_workers: 1, comp_workers: 1), File.read(answer))
     compare_correctness(run(input, hash_workers: HASH_WORKERS, data_workers: 1, comp_workers: 1), File.read(answer))
     compare_correctness(run(input, hash_workers: HASH_WORKERS, data_workers: HASH_WORKERS, comp_workers: 1), File.read(answer))
-    # TODO compare_correctness(run(input, hash_workers: 4, data_workers: 1, comp_workers: 2), File.read(answer))
+    compare_correctness(run(input, hash_workers: HASH_WORKERS, data_workers: 1, comp_workers: 4), File.read(answer))
+    compare_correctness(run(input, hash_workers: HASH_WORKERS, data_workers: 1, comp_workers: 4, buffered: true), File.read(answer))
   end
 end
 
-# test_format
-# test_correctness
+test_format
+test_correctness
 # hash_timings
-hash_group_timings
+# hash_group_timings
+compare_tree_timings

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"container/list"
 	"sync"
 )
 
@@ -103,4 +104,173 @@ func hashTreesParallel(trees []*Tree, hashWorkersCount int, dataWorkersCount int
 	dataWorkerWait.Wait()
 
 	return treesByHash
+}
+
+type WorkBuffer struct {
+	items     *list.List
+	done      bool
+	size      int
+	lock      *sync.Mutex
+	waitFull  *sync.Cond
+	waitEmpty *sync.Cond
+}
+
+type WorkBufferItem struct {
+	matrix *AdjacencyMatrix
+	i      int
+	treeI  int
+	j      int
+	treeJ  int
+}
+
+func (workBuffer *WorkBuffer) Remove() *WorkBufferItem {
+	workBuffer.lock.Lock()
+	for workBuffer.items.Len() == 0 && !workBuffer.done {
+		workBuffer.waitEmpty.Wait()
+	}
+
+	if workBuffer.items.Len() == 0 && workBuffer.done {
+		workBuffer.lock.Unlock()
+		return nil
+	}
+
+	el := workBuffer.items.Back()
+	workBuffer.items.Remove(el)
+
+	workBuffer.waitFull.Signal()
+	workBuffer.lock.Unlock()
+
+	return el.Value.(*WorkBufferItem)
+}
+
+func (workBuffer *WorkBuffer) Add(item *WorkBufferItem) {
+	workBuffer.lock.Lock()
+	for workBuffer.items.Len() == workBuffer.size {
+		workBuffer.waitFull.Wait()
+	}
+
+	workBuffer.items.PushBack(item)
+
+	workBuffer.waitEmpty.Signal()
+	workBuffer.lock.Unlock()
+
+	return
+}
+
+func compareTreesParallel(hashGroup HashGroups, trees []*Tree, compWorkersCount int) ComparisonGroups {
+	var compareWorkerWait sync.WaitGroup
+
+	var comparisonGroups ComparisonGroups
+	comparisonGroups.Matrixes = make(map[int]AdjacencyMatrix)
+	comparisonGroups.SkipIds = make([]bool, len(trees))
+
+	var lock sync.Mutex
+	workBuffer := WorkBuffer{
+		items:     list.New(),
+		done:      false,
+		size:      compWorkersCount,
+		lock:      &lock,
+		waitFull:  sync.NewCond(&lock),
+		waitEmpty: sync.NewCond(&lock),
+	}
+
+	for i := range comparisonGroups.SkipIds {
+		comparisonGroups.SkipIds[i] = false
+	}
+
+	for i := 0; i < compWorkersCount; i++ {
+		compareWorkerWait.Add(1)
+
+		go func(workBuffer *WorkBuffer) {
+			defer compareWorkerWait.Done()
+
+			for item := workBuffer.Remove(); item != nil; item = workBuffer.Remove() {
+				if !comparisonGroups.SkipIds[item.treeI] &&
+					treesEqualSequential(trees[item.treeI], trees[item.treeJ]) {
+					comparisonGroups.SkipIds[item.treeJ] = true
+					// println("DEBUG:", treeI, "equal", treeJ)
+					item.matrix.Values[item.i*(2*item.matrix.Size-item.i+1)/2+item.j+1] = true
+				}
+			}
+		}(&workBuffer)
+	}
+
+	for hash, treeIndexes := range hashGroup {
+		if len(treeIndexes) > 1 {
+			n := len(treeIndexes)
+			matrix := AdjacencyMatrix{n, make([]bool, n*(n+1)/2)}
+
+			for i := range matrix.Values {
+				matrix.Values[i] = false
+			}
+
+			for i, treeI := range treeIndexes {
+				if comparisonGroups.SkipIds[treeI] {
+					continue
+				}
+
+				for j, treeJ := range treeIndexes[i+1:] {
+					workBuffer.Add(&WorkBufferItem{&matrix, i, treeI, j, treeJ})
+				}
+			}
+			comparisonGroups.Matrixes[hash] = matrix
+		}
+	}
+
+	workBuffer.lock.Lock()
+
+	workBuffer.done = true
+	workBuffer.waitEmpty.Broadcast()
+
+	workBuffer.lock.Unlock()
+
+	compareWorkerWait.Wait()
+
+	return comparisonGroups
+}
+
+func compareTreesParallelUnbuffered(hashGroup HashGroups, trees []*Tree) ComparisonGroups {
+	var compareWorkerWait sync.WaitGroup
+	var comparisonGroups ComparisonGroups
+	comparisonGroups.Matrixes = make(map[int]AdjacencyMatrix)
+	comparisonGroups.SkipIds = make([]bool, len(trees))
+
+	for i := range comparisonGroups.SkipIds {
+		comparisonGroups.SkipIds[i] = false
+	}
+
+	for hash, treeIndexes := range hashGroup {
+		if len(treeIndexes) > 1 {
+			n := len(treeIndexes)
+			matrix := AdjacencyMatrix{n, make([]bool, n*(n+1)/2)}
+
+			for i := range matrix.Values {
+				matrix.Values[i] = false
+			}
+
+			for i, treeI := range treeIndexes {
+				if comparisonGroups.SkipIds[treeI] {
+					continue
+				}
+
+				for j, treeJ := range treeIndexes[i+1:] {
+					compareWorkerWait.Add(1)
+
+					go func(matrix AdjacencyMatrix, n int, i int, treeI int, j int, treeJ int) {
+						defer compareWorkerWait.Done()
+						if !comparisonGroups.SkipIds[treeI] && treesEqualSequential(trees[treeI], trees[treeJ]) {
+							comparisonGroups.SkipIds[treeJ] = true
+							// println("DEBUG:", treeI, "equal", treeJ)
+							matrix.Values[i*(2*n-i+1)/2+j+1] = true
+						}
+					}(matrix, n, i, treeI, j, treeJ)
+				}
+			}
+			comparisonGroups.Matrixes[hash] = matrix
+		}
+	}
+
+	compareWorkerWait.Wait()
+
+	return comparisonGroups
 }

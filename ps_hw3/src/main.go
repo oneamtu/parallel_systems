@@ -1,8 +1,9 @@
 //TODO You should submit your code and report packaged into a tar file on Canvas. If you do not complete the optional implementation in step 2.2, name your main go program BST.go. If you do complete it, name it BST_opt.go instead.
 
 //TODO:
-//parallel comp
+//buffer parallel comp
 //opt/fine-grained
+//unroll hash
 
 package main
 
@@ -29,15 +30,47 @@ func (hashGroups *HashGroups) Print() {
 	}
 }
 
-type IdGroups [][]int
+type ComparisonGroups struct {
+	Matrixes map[int]AdjacencyMatrix
+	SkipIds  []bool
+}
 
-func (idGroups *IdGroups) Print() {
-	for id, treeIndexes := range *idGroups {
-		fmt.Printf("group %v:", id)
-		for _, index := range treeIndexes {
-			fmt.Printf(" %v", index)
+// triangular matrix array of size Size*(Size+1)/2
+type AdjacencyMatrix struct {
+	Size   int
+	Values []bool
+}
+
+func (comparisonGroups *ComparisonGroups) Print(hashGroups *HashGroups) {
+	group := 0
+
+	for hash, matrix := range comparisonGroups.Matrixes {
+		n := matrix.Size
+		treeIndexes := (*hashGroups)[hash]
+
+		for i := 0; i < n; i++ {
+			if comparisonGroups.SkipIds[treeIndexes[i]] {
+				continue
+			}
+
+			printedGroup := false
+
+			for j := i + 1; j < n; j++ {
+				if matrix.Values[i*(2*n-i+1)/2+j-i] {
+					if !printedGroup {
+						printedGroup = true
+						fmt.Printf("group %v:", group)
+						group += 1
+					}
+
+					fmt.Printf(" %v", treeIndexes[j])
+				}
+			}
+
+			if printedGroup {
+				fmt.Printf(" %v\n", treeIndexes[i])
+			}
 		}
-		fmt.Printf("\n")
 	}
 }
 
@@ -92,15 +125,19 @@ func main() {
 
 	start = time.Now()
 
-	var comparisonGroups IdGroups
+	var comparisonGroups ComparisonGroups
 
 	if *compWorkersCount == 1 {
 		comparisonGroups = compareTreesSequential(hashGroups, trees)
+	} else if *buffered {
+		comparisonGroups = compareTreesParallel(hashGroups, trees, *compWorkersCount)
+	} else {
+		comparisonGroups = compareTreesParallelUnbuffered(hashGroups, trees)
 	}
 
 	elapsed = time.Since(start)
 
 	fmt.Printf("compareTreeTime: %vµs\n", float64(elapsed.Nanoseconds())/1000)
 
-	comparisonGroups.Print()
+	comparisonGroups.Print(&hashGroups)
 }
