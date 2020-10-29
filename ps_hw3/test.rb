@@ -120,6 +120,7 @@ def hash_group_timings
     ["input/coarse.txt", "input/fine.txt"].each do |input|
       [[1, 1, true, false],
        [HASH_WORKERS, 1, false, true],
+       [HASH_WORKERS, 1, true, true],
        [HASH_WORKERS, 4, true, true],
        [HASH_WORKERS, 16, true, true],
        [HASH_WORKERS, 4, true, false],
@@ -225,8 +226,8 @@ def test_correctness
   end
 end
 
-test_format
-test_correctness
+# test_format
+# test_correctness
 # hash_timings
-# hash_group_timings
+hash_group_timings
 # compare_tree_timings

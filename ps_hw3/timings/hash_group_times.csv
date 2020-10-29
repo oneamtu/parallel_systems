@@ -1,14 +1,16 @@
-input/coarse.txt, 1, 1, false, 21702.732449999992, 217.48290079578106
-input/coarse.txt-unbuffered, 32, 1, true, 8671.733250000001, 218.28509297519025
-input/coarse.txt, 32, 4, true, 9158.7069, 249.83065089033806
-input/coarse.txt, 32, 16, true, 9022.541500000001, 129.22986700236913
-input/coarse.txt, 32, 4, false, 8846.553750000001, 274.1623057513331
-input/coarse.txt, 32, 16, false, 8886.7524, 215.85194567675296
-input/coarse.txt, 32, 32, false, 9133.30125, 1005.7711422394699
-input/fine.txt, 1, 1, false, 13715.66625, 1103.7480111627326
-input/fine.txt-unbuffered, 32, 1, true, 42770.74585, 2247.1168977064654
-input/fine.txt, 32, 4, true, 12815.294849999998, 863.83556277762
-input/fine.txt, 32, 16, true, 9479.13795, 977.2443423313576
-input/fine.txt, 32, 4, false, 9636.933250000002, 799.1908381906587
-input/fine.txt, 32, 16, false, 7883.452499999999, 1184.6126595521214
-input/fine.txt, 32, 32, false, 13757.749049999999, 1191.25124892138
+input/coarse.txt,             1,   1,   sequential,  21572.973100000003
+input/coarse.txt-unbuffered,  32,  1,   channel,   8543.411500000002
+input/coarse.txt,             32,  1,   channel,   8911.71055
+input/coarse.txt,             32,  4,   channel,   9040.168950000001
+input/coarse.txt,             32,  16,  channel,   9449.662050000003
+input/coarse.txt,             32,  4,   threads,  8983.06475
+input/coarse.txt,             32,  16,  threads,  9081.968100000002
+input/coarse.txt,             32,  32,  threads,  9090.0494
+input/fine.txt,               1,   1,   sequential,  13726.4851
+input/fine.txt-unbuffered,    32,  1,   channel,   45535.15175
+input/fine.txt,               32,  1,   channel,   22224.886600000005
+input/fine.txt,               32,  4,   channel,   13403.166200000001
+input/fine.txt,               32,  16,  channel,   9480.804200000002
+input/fine.txt,               32,  4,   threads,  9680.127550000001
+input/fine.txt,               32,  16,  threads,  7248.3317
+input/fine.txt,               32,  32,  threads,  14424.741999999998

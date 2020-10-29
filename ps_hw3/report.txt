@@ -1,0 +1,233 @@
+# Go lab BST comparison
+
+## Preamble
+
+I took all the measurements on a Dell XPS 13 laptop with a Intel(R) Core(TM) i7-7560U CPU @ 2.40GHz processor, which has
+2 hyper-threading cores for a total of 4 cores; 8 GB of physical RAM and an SSD-backed swap.
+
+The important thing to note is that with 4 cores, the best speedup we can hope for would be 4x.
+
+## Parallel Hashing lessons learned P1 - channels vs "tacit" queueing
+
+After I implemented an hash grouping sequential version and a testing harness to easily check correctness,
+I started the parallelization process.
+
+I ended up implementing both a channel and a mutex-based version of the hash group update, with support for fine-grained
+access for both of them. Before I talk about them I want to talk about queueing the jobs. My first approach involved
+using a channel per worker to queue up the jobs for each worker. It seemed like a more elegant solution, and more even
+way to distribute workload. My main thread would just iterate over all trees, and enqueue them in a ring-like fashion on
+each channel. The channels were buffered too to avoid blocking. After I tried a simple slice-based work distribution -
+since we know the size of the dataset, we can just allocate relatively even slices to each worker.
+
+Channel version:
+
+file, hash worker threads, time (µs)
+
+input/coarse.txt,  2,       157275.14625000002
+input/coarse.txt,  4,       89505.59995000002
+input/coarse.txt,  16,      93318.6722
+input/coarse.txt,  100,     92359.8634
+input/fine.txt,    2,       151695.0062
+input/fine.txt,    4,       116074.04720000003
+input/fine.txt,    16,      111003.43449999997
+input/fine.txt,    100000,  389473.77314999996
+
+Simple slice version
+
+file, hash worker threads, time (µs)
+
+input/coarse.txt,  2,       122747.94595000001
+input/coarse.txt,  4,       87855.60685000001
+input/coarse.txt,  16,      90429.44485
+input/coarse.txt,  100,     86130.1644
+input/fine.txt,    2,       138040.5309
+input/fine.txt,    4,       99455.9529
+input/fine.txt,    16,      110681.69685
+input/fine.txt,    100000,  137664.36535
+
+Perhaps not surprisingly, the simpler approach performed better overall. Definitely less flexible, but it makes sense that
+some sort of "tacit" slicing of the worker queue performs better than a solution that forces some synchronization.
+Worth noting that, for smaller values of the worker queue the solutions performed similarly, but the channels definitely
+performed worse at high numbers of workers; perhaps obvious, but more synchronization = worse performance.
+
+Now let's move onto analyzing the hash times!
+
+## Parallel Hashing lessons learned P2 - goroutines go wild
+
+Here are the timings for the variants of hashing - 1 thread means sequential, and the last entry matches the number
+of data entries (equivalent to making a go routine for each tree).
+
+NOTE - These numbers may differ from the ones above; the former I gathered while working on the implementation that I
+subsequently refined, but I wanted to make sure I compare apples to apples in the previous section.
+
+file, hash worker threads, time (µs)
+
+input/coarse.txt,  1,       24762.976350000004
+input/coarse.txt,  2,       13706.221549999998
+input/coarse.txt,  4,       8790.95225
+input/coarse.txt,  8,       10073.8418
+input/coarse.txt,  16,      10541.911800000002
+input/coarse.txt,  32,      10323.704050000002
+input/coarse.txt,  64,      9246.488700000002
+input/coarse.txt,  100,     11055.4989
+input/fine.txt,    1,       13702.939300000002
+input/fine.txt,    2,       7557.61765
+input/fine.txt,    4,       5571.856100000001
+input/fine.txt,    8,       4730.743149999999
+input/fine.txt,    16,      5063.0961
+input/fine.txt,    32,      5285.214099999999
+input/fine.txt,    64,      4797.57945
+input/fine.txt,    128,     5037.850649999999
+input/fine.txt,    256,     4714.32545
+input/fine.txt,    512,     5094.88105
+input/fine.txt,    1024,    4839.5544
+input/fine.txt,    2048,    5211.5517500000005
+input/fine.txt,    4096,    5889.486750000001
+input/fine.txt,    8192,    7088.521950000002
+input/fine.txt,    16384,   10361.99005
+input/fine.txt,    32768,   10938.9372
+input/fine.txt,    65536,   17881.84265
+input/fine.txt,    100000,  24431.536049999995
+
+Q: Which implementation is faster (and by how much)?
+
+The parallel implementation is (unsurprisingly) faster! At best, the parallel version with a set number of workers is
+~ 3x faster than the sequential. And spawning a limited number of workers is faster
+than letting the goroutines go wild.
+
+Q: Can Go manage goroutines well enough that you don't have to worry about how many threads to spawn anymore?
+
+Go does formidably well, but I wouldn't say we don't have to worry about threadcount. At least in my results,
+for fine.txt when we spawn 100k threads, the overall result is ~2x slower than sequential and ~5x slower than the
+worker pool variant. That said, once the cores are occupied, for ranges in 4-4k the timings are similar, so little
+overhead for a good number of threads.
+
+## Hash Grouping
+
+My fastest hash implementation seemed to be around 32 hash workers, so I'll use that for the rest of the timings.
+These timings include the 2 optional fine-grained approaches, implemented both with channels and with locks.
+
+The channel implementations use data-workers channels; each hash workers sends their result to a channel
+selected based on the hash (hash mod channel count); this way, there is no contention on which workers update
+the data structure without a need for locks. Out of the box, this also covers the 1 channel implementation.
+The channel implementation is toggled via --data-use-channels=true.
+
+The unbuffered runs use an unbuffered channel for data worker communication (as a comparison point).
+The unbuffered implementation is toggled via --data-buffered=false.
+
+The threads-lock implementations use a number of data-workers locks for synchronization;
+when data-workers == hash-workers, then we use one lock (per instructions).
+When there are multiple locks, the locks control which threads access the array associatied
+with hash (again via hash mod data-worker).
+
+file, hash worker threads, data worker threads, data worker type, time (µs)
+
+input/coarse.txt,             1,   1,   sequential,  21572.973100000003
+input/coarse.txt,             32,  1,   channel,     8911.71055
+input/coarse.txt-unbuffered,  32,  1,   channel,     8543.411500000002
+input/coarse.txt,             32,  4,   channel,     9040.168950000001
+input/coarse.txt,             32,  16,  channel,     9449.662050000003
+input/coarse.txt,             32,  4,   threads,     8983.06475
+input/coarse.txt,             32,  16,  threads,     9081.968100000002
+input/coarse.txt,             32,  32,  threads,     9090.0494
+input/fine.txt,               1,   1,   sequential,  13726.4851
+input/fine.txt,               32,  1,   channel,     22224.886600000005
+input/fine.txt-unbuffered,    32,  1,   channel,     45535.15175
+input/fine.txt,               32,  4,   channel,     13403.166200000001
+input/fine.txt,               32,  16,  channel,     9480.804200000002
+input/fine.txt,               32,  4,   threads,     9680.127550000001
+input/fine.txt,               32,  16,  threads,     7248.3317
+input/fine.txt,               32,  32,  threads,     14424.741999999998
+
+Q: Which approach has more overhead? How much faster are they compared to a single thread?
+
+For coarse.txt, where the workload is more CPU-intensive, less contention-oriented,
+the approaches seem equivalent - the timings are all similar, slightly more than ~2x faster than sequential.
+
+For fine.txt, where the workload is less CPU-intensive, per job, the overhead is more obvious.
+The unbuffered single channel approach ends up having the most overhead; that makes sense, since
+the single channel becomes a bottleneck, and the lack of a buffer causes a lot of blocking. This
+ends up being ~4x slower than sequential. The buffered single channel comes next, ~2x slower.
+The single-lock implementation comes next, close to be on par with the sequential version;
+thus the simple lock is better than the single thread channel approach.
+
+The optional implementations end up being quicker than the sequential, noted below.
+
+Q: Which approach do you find simpler?
+
+The locks were simpler to add than managing the additional data worker, channels and pool.
+Channels do carry some elegance and flexibility to them, but it seems that using a lock or
+using "tacit" synchronization is just more performant, and somewhat simpler.
+
+Q: Was access to the shared data structure a bottleneck before?
+
+Yes, the contention was a bottleneck for a situation like "fine.txt".
+We see an improvement in performance with more parallelism in the data pipeline.
+
+Q: How do channels and locks compare now that there is more parallelism?
+
+Locks are still more performant! For "fine.txt" the locks timings are ~1.5x faster
+than the channel counterpart. It makes sense, since there are fewer threads, so less
+synchronization overall. The finer point may be that for "coarse.txt" it didn't matter,
+so with hardware that supports more parallelization, both approaches may scale
+asymptotically. Having the task parallelization may even be more performant!
+
+## Tree Comparison
+
+The final chapter!
+
+-unbuffered here represents the implementation running with as many go-routines as comparisons
+to make.
+-rolled represents an initial version of the implementation that used a comparison routine
+that recursively filled 2 arrays with the values of each tree, and then compared them.
+I ended up unrolling that into a stack-based iterator approach, which gave my sequential implementation
+a big boost! I guess the lesson here is, chances are there is something you can do before
+parallelism that may be more impactful (~40-50x boost). This class is not about that though, so back
+to our regular programming.
+
+file, comparison worker threads, time (µs)
+
+input/coarse.txt,             1,   26351.8399
+input/coarse.txt-rolled,      1,   1158657.6235000002
+input/coarse.txt,             2,   18295.87675
+input/coarse.txt-unbuffered,  x,   12535.27595
+input/coarse.txt,             4,   12830.855850000002
+input/coarse.txt,             8,   11992.474899999997
+input/coarse.txt,             16,  12564.646550000001
+input/fine.txt,               1,   994026.2232499998
+input/fine.txt-rolled,        1,   3704801.1630499996
+input/fine.txt,               2,   2786376.7097
+input/fine.txt-unbuffered,    x,   1858360.6315000001
+input/fine.txt,               4,   2556461.5447000004
+input/fine.txt,               8,   2428928.7914000005
+input/fine.txt,               16,  2299982.8756500003
+input/fine.txt,               32,  1941025.271
+
+Q: How do the performance and complexity of both approaches compare with each other?
+
+The "wild" threads approach (without a work queue) worked better than the queue-backed variant
+for "fine.txt", where there is high contention - 185ms vs 194ms. In the "coarse.txt" example,
+the "wild" threads approach worked similarly - 12.5ms vs 12ms.
+
+The queue-backed variant is definitely more complex! The "wild threads" required just a couple changes.
+
+Q: How do they scale compared to a single thread?
+
+For "coarse.txt" we got ~ 2x worth of speedup with our approach. "fine.txt", sequential performs better!
+
+My guess is there is more contention to manage for "fine.txt"; my comparison implemention is lean, so
+it will highlight contention issues. sequential can also prune out more comparisons - this is why
+I think it's overall slower.
+
+Q: Is the additional complexity of managing a thread pool worthwhile?
+
+Not in this case - although with a different implementation it may be worthwhile if we could actually squeeze
+out more speedup.
+
+My buffer is backed by a stack backed by an array. I implemented a ring buffer too with some fine-grained controls,
+but the overhead made it overall slower. If my locking data structure could allow multiple reads concurrently,
+then "fine.txt" could also get some benefits from parallelism. Alas.
+
+# Closing thoughts
+
+I spent ~ 35 hours on this lab!
