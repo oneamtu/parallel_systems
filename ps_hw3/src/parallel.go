@@ -1,7 +1,6 @@
 package main
 
 import (
-	"container/list"
 	"sync"
 )
 
@@ -104,7 +103,7 @@ func hashTreesParallel(trees []*Tree, hashWorkersCount int, dataWorkersCount int
 }
 
 type WorkBuffer struct {
-	items     *list.List
+	items     []*WorkBufferItem
 	done      bool
 	size      int
 	lock      *sync.Mutex
@@ -122,31 +121,32 @@ type WorkBufferItem struct {
 
 func (workBuffer *WorkBuffer) Remove() *WorkBufferItem {
 	workBuffer.lock.Lock()
-	for workBuffer.items.Len() == 0 && !workBuffer.done {
+	for len(workBuffer.items) == 0 && !workBuffer.done {
 		workBuffer.waitEmpty.Wait()
 	}
 
-	if workBuffer.items.Len() == 0 && workBuffer.done {
+	if len(workBuffer.items) == 0 && workBuffer.done {
 		workBuffer.lock.Unlock()
 		return nil
 	}
 
-	el := workBuffer.items.Back()
-	workBuffer.items.Remove(el)
+	value := workBuffer.items[len(workBuffer.items)-1]
+	workBuffer.items = workBuffer.items[:len(workBuffer.items)-1]
 
 	workBuffer.waitFull.Signal()
 	workBuffer.lock.Unlock()
 
-	return el.Value.(*WorkBufferItem)
+	return value
 }
 
 func (workBuffer *WorkBuffer) Add(item *WorkBufferItem) {
 	workBuffer.lock.Lock()
-	for workBuffer.items.Len() == workBuffer.size {
+	for len(workBuffer.items) == workBuffer.size {
 		workBuffer.waitFull.Wait()
 	}
 
-	workBuffer.items.PushBack(item)
+	workBuffer.items = workBuffer.items[:len(workBuffer.items)+1]
+	workBuffer.items[len(workBuffer.items)-1] = item
 
 	workBuffer.waitEmpty.Signal()
 	workBuffer.lock.Unlock()
@@ -163,7 +163,7 @@ func compareTreesParallel(hashGroup HashGroups, trees []*Tree, compWorkersCount 
 
 	var lock sync.Mutex
 	workBuffer := WorkBuffer{
-		items:     list.New(),
+		items:     make([]*WorkBufferItem, 0, compWorkersCount),
 		done:      false,
 		size:      compWorkersCount,
 		lock:      &lock,
@@ -178,7 +178,7 @@ func compareTreesParallel(hashGroup HashGroups, trees []*Tree, compWorkersCount 
 	for i := 0; i < compWorkersCount; i++ {
 		compareWorkerWait.Add(1)
 
-		go func(workBuffer *WorkBuffer) {
+		go func(workBuffer *WorkBuffer, i int) {
 			defer compareWorkerWait.Done()
 
 			for item := workBuffer.Remove(); item != nil; item = workBuffer.Remove() {
@@ -189,7 +189,7 @@ func compareTreesParallel(hashGroup HashGroups, trees []*Tree, compWorkersCount 
 					item.matrix.Values[item.i*(2*item.matrix.Size-item.i+1)/2+item.j+1] = true
 				}
 			}
-		}(&workBuffer)
+		}(&workBuffer, i)
 	}
 
 	for hash, treeIndexes := range hashGroup {

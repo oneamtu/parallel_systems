@@ -228,5 +228,5 @@ end
 test_format
 test_correctness
 # hash_timings
-hash_group_timings
-compare_tree_timings
+# hash_group_timings
+# compare_tree_timings
