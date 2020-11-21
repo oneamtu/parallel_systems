@@ -53,6 +53,12 @@ fn register_clients(
     let mut clients = vec![];
     // register clients with coordinator (set up communication channels and sync objects)
     // add client to the vector and return the vector.
+    for i in 0..n_clients {
+        let (tx, rx) = coordinator.client_join(format!("Client {}", i));
+        let client = Client::new(i, tx, rx, running.clone());
+
+        clients.push(client);
+    }
     clients
 }
 
@@ -89,11 +95,26 @@ fn register_participants(
     n_participants: i32,
     logpathbase: &String,
     running: &Arc<AtomicBool>,
-    success_prob: f64,
+    op_success_prob: f64,
+    msg_success_prob: f64,
 ) -> Vec<Participant> {
     let mut participants = vec![];
     // register participants with coordinator (set up communication channels and sync objects)
     // add client to the vector and return the vector.
+    for i in 0..n_participants {
+        let (tx, rx) = coordinator.participant_join(format!("Participant {}", i));
+        let participant = Participant::new(
+            i,
+            running.clone(),
+            tx,
+            rx,
+            format!("{}//{}.log", logpathbase, i),
+            op_success_prob,
+            msg_success_prob,
+        );
+
+        participants.push(participant);
+    }
     participants
 }
 
@@ -111,10 +132,10 @@ fn register_participants(
 ///    to return wait handles to the caller
 ///
 fn launch_clients(clients: Vec<Client>, n_requests: i32, handles: &mut Vec<JoinHandle<()>>) {
-
-    // do something to create threads for client 'processes'
-    // the mutable handles parameter allows you to return
-    // more than one wait handle to the caller to join on.
+    for mut client in clients {
+        let handle = thread::spawn(move || client.protocol(n_requests));
+        handles.push(handle);
+    }
 }
 
 ///
@@ -130,10 +151,10 @@ fn launch_clients(clients: Vec<Client>, n_requests: i32, handles: &mut Vec<JoinH
 ///    to return wait handles to the caller
 ///
 fn launch_participants(participants: Vec<Participant>, handles: &mut Vec<JoinHandle<()>>) {
-
-    // do something to create threads for participant 'processes'
-    // the mutable handles parameter allows you to return
-    // more than one wait handle to the caller to join on.
+    for mut participant in participants {
+        let handle = thread::spawn(move || participant.protocol());
+        handles.push(handle);
+    }
 }
 
 ///
@@ -174,7 +195,27 @@ fn run(opts: &tpcoptions::TPCOptions) {
     let clients: Vec<Client>;
     let participants: Vec<Participant>;
 
+    coordinator = Coordinator::new(cpath, &running, 1.0);
+    clients = register_clients(&mut coordinator, opts.num_clients, &running);
+    participants = register_participants(
+        &mut coordinator,
+        opts.num_participants,
+        &opts.logpath,
+        &running,
+        opts.success_probability_ops,
+        opts.success_probability_msg,
+    );
+
+    let handle = thread::spawn(move || coordinator.protocol());
+    handles.push(handle);
+
+    launch_participants(participants, &mut handles);
+    launch_clients(clients, opts.num_requests, &mut handles);
+
     // wait for clients, participants, and coordinator here...
+    for handle in handles {
+        handle.join().unwrap_or_else(|err| error!("{:?}", err))
+    }
 }
 
 ///

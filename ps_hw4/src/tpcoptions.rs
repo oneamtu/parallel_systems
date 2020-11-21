@@ -49,7 +49,7 @@ impl TPCOptions {
         let default_success_prob_ops = "1.0";
         let default_success_prob_msg = "1.0";
 
-        let default_logpath = "~/tmp";
+        let default_logpath = "/tmp/2pc";
 
         let matches = App::new("cs380p-2pc")
             .version("0.1.0")

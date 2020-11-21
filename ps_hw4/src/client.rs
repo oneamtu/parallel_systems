@@ -16,6 +16,7 @@ use std::time::Duration;
 
 // static counter for getting unique TXID numbers
 static TXID_COUNTER: AtomicI32 = AtomicI32::new(1);
+const EXIT_SLEEP_DURATION: Duration = Duration::from_millis(10);
 
 // client state and
 // primitives for communicating with
@@ -23,7 +24,13 @@ static TXID_COUNTER: AtomicI32 = AtomicI32::new(1);
 #[derive(Debug)]
 pub struct Client {
     pub id: i32,
-    // ...
+    running: Arc<AtomicBool>,
+    tx: Sender<message::ProtocolMessage>,
+    rx: Receiver<message::ProtocolMessage>,
+    successful_ops: usize,
+    failed_ops: usize,
+    unknown_ops: usize,
+    request_id: i32,
 }
 
 ///
@@ -48,14 +55,19 @@ impl Client {
     ///
     pub fn new(
         i: i32,
-        is: String,
         tx: Sender<message::ProtocolMessage>,
         rx: Receiver<message::ProtocolMessage>,
-        r: Arc<AtomicBool>,
+        running: Arc<AtomicBool>,
     ) -> Client {
         Client {
             id: i,
-            // ...
+            running: running,
+            tx: tx,
+            rx: rx,
+            successful_ops: 0,
+            failed_ops: 0,
+            unknown_ops: 0,
+            request_id: 0,
         }
     }
 
@@ -66,7 +78,9 @@ impl Client {
     pub fn wait_for_exit_signal(&mut self) {
         trace!("Client_{} waiting for exit signal", self.id);
 
-        // TODO
+        while self.running.load(Ordering::SeqCst) {
+            thread::sleep(EXIT_SLEEP_DURATION);
+        }
 
         trace!("Client_{} exiting", self.id);
     }
@@ -79,23 +93,26 @@ impl Client {
         trace!("Client_{}::send_next_operation", self.id);
 
         // create a new request with a unique TXID.
-        let request_no: i32 = 0; // TODO--choose another number!
+        let request_id: i32 = 0;
         let txid = TXID_COUNTER.fetch_add(1, Ordering::SeqCst);
 
         info!(
             "Client {} request({})->txid:{} called",
-            self.id, request_no, txid
+            self.id, request_id, txid
         );
         let pm = message::ProtocolMessage::generate(
-            message::MessageType::ClientRequest,
+            MessageType::ClientRequest,
             txid,
             format!("Client_{}", self.id),
-            request_no,
+            request_id,
         );
 
-        info!("client {} calling send...", self.id);
+        self.request_id += 1;
 
-        // TODO
+        info!("client {} calling send...", self.id);
+        trace!("client {} send payload {:?}", self.id, pm);
+
+        self.tx.send(pm).unwrap();
 
         trace!("Client_{}::exit send_next_operation", self.id);
     }
@@ -107,10 +124,17 @@ impl Client {
     /// not fail in this simulation
     ///
     pub fn recv_result(&mut self) {
-        trace!("Client_{}::recv_result", self.id);
+        info!("Client_{}::recv_result", self.id);
 
-        // TODO
+        let pm = self.rx.recv().unwrap();
 
+        match pm.mtype {
+            MessageType::ClientResultCommit => self.successful_ops += 1,
+            MessageType::ClientResultAbort => self.failed_ops += 1,
+            _ => panic!("Unknown MessageType for message {:?}", pm),
+        }
+
+        trace!("Client_{} receive payload {:?}", self.id, pm);
         trace!("Client_{}::exit recv_result", self.id);
     }
 
@@ -120,13 +144,9 @@ impl Client {
     /// transaction requests made by this client before exiting.
     ///
     pub fn report_status(&mut self) {
-        // TODO: collect real stats!
-        let successful_ops: usize = 0;
-        let failed_ops: usize = 0;
-        let unknown_ops: usize = 0;
         println!(
             "Client_{}:\tC:{}\tA:{}\tU:{}",
-            self.id, successful_ops, failed_ops, unknown_ops
+            self.id, self.successful_ops, self.failed_ops, self.unknown_ops
         );
     }
 
@@ -140,7 +160,10 @@ impl Client {
     pub fn protocol(&mut self, n_requests: i32) {
         // run the 2PC protocol for each of n_requests
 
-        // TODO
+        for _ in 0..n_requests {
+            self.send_next_operation();
+            self.recv_result();
+        }
 
         // wait for signal to exit
         // and then report status

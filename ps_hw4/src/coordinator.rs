@@ -38,6 +38,12 @@ pub enum CoordinatorState {
 pub struct Coordinator {
     state: CoordinatorState,
     log: oplog::OpLog,
+    client_txs: Vec<Sender<ProtocolMessage>>,
+    client_rxs: Vec<Receiver<ProtocolMessage>>,
+    participant_txs: Vec<Sender<ProtocolMessage>>,
+    participant_rxs: Vec<Receiver<ProtocolMessage>>,
+    running: Arc<AtomicBool>,
+    // TODO: rename
     op_success_prob: f64,
     // TODO: ...
 }
@@ -62,27 +68,17 @@ impl Coordinator {
     ///     r: atomic bool --> still running?
     ///     success_prob --> probability operations/sends succeed
     ///
-    pub fn new(logpath: String, r: &Arc<AtomicBool>, success_prob: f64) -> Coordinator {
+    pub fn new(logpath: String, running: &Arc<AtomicBool>, success_prob: f64) -> Coordinator {
         Coordinator {
             state: CoordinatorState::Quiescent,
             log: oplog::OpLog::new(logpath),
             op_success_prob: success_prob,
-            // TODO...
+            client_txs: vec![],
+            client_rxs: vec![],
+            participant_txs: vec![],
+            participant_rxs: vec![],
+            running: running.clone(),
         }
-    }
-
-    ///
-    /// participant_join()
-    /// handle the addition of a new participant
-    /// HINT: keep track of any channels involved!
-    /// HINT: you'll probably need to change this routine's
-    ///       signature to return something!
-    ///       (e.g. channel(s) to be used)
-    ///
-    pub fn participant_join(&mut self, name: &String) {
-        assert!(self.state == CoordinatorState::Quiescent);
-
-        // TODO
     }
 
     ///
@@ -93,10 +89,46 @@ impl Coordinator {
     ///       signature to return something!
     ///       (e.g. channel(s) to be used)
     ///
-    pub fn client_join(&mut self, name: &String) {
+    pub fn client_join(
+        &mut self,
+        name: String,
+    ) -> (Sender<ProtocolMessage>, Receiver<ProtocolMessage>) {
         assert!(self.state == CoordinatorState::Quiescent);
 
-        // TODO
+        info!("coordinator::client_join({})", name);
+
+        let (local_tx, remote_rx) = channel();
+        let (remote_tx, local_rx) = channel();
+
+        self.client_txs.push(local_tx);
+        self.client_rxs.push(local_rx);
+
+        (remote_tx, remote_rx)
+    }
+
+    ///
+    /// participant_join()
+    /// handle the addition of a new participant
+    /// HINT: keep track of any channels involved!
+    /// HINT: you'll probably need to change this routine's
+    ///       signature to return something!
+    ///       (e.g. channel(s) to be used)
+    ///
+    pub fn participant_join(
+        &mut self,
+        name: String,
+    ) -> (Sender<ProtocolMessage>, Receiver<ProtocolMessage>) {
+        assert!(self.state == CoordinatorState::Quiescent);
+
+        info!("coordinator::participant_join({})", name);
+
+        let (local_tx, remote_rx) = channel();
+        let (remote_tx, local_rx) = channel();
+
+        self.participant_txs.push(local_tx);
+        self.participant_rxs.push(local_rx);
+
+        (remote_tx, remote_rx)
     }
 
     ///

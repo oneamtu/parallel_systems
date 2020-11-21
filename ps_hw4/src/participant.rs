@@ -37,7 +37,10 @@ pub enum ParticipantState {
 #[derive(Debug)]
 pub struct Participant {
     id: i32,
+    running: Arc<AtomicBool>,
     state: ParticipantState,
+    tx: Sender<ProtocolMessage>,
+    rx: Receiver<ProtocolMessage>,
     log: oplog::OpLog,
     op_success_prob: f64,
     msg_success_prob: f64,
@@ -68,21 +71,22 @@ impl Participant {
     ///
     pub fn new(
         i: i32,
-        is: String,
+        running: Arc<AtomicBool>,
         tx: Sender<ProtocolMessage>,
         rx: Receiver<ProtocolMessage>,
         logpath: String,
-        r: Arc<AtomicBool>,
-        f_success_prob_ops: f64,
-        f_success_prob_msg: f64,
+        op_success_prob: f64,
+        msg_success_prob: f64,
     ) -> Participant {
         Participant {
-            id: i,
-            log: oplog::OpLog::new(logpath),
-            op_success_prob: f_success_prob_ops,
-            msg_success_prob: f_success_prob_msg,
             state: ParticipantState::Quiescent,
-            // TODO ...
+            id: i,
+            running: running,
+            tx: tx,
+            rx: rx,
+            log: oplog::OpLog::new(logpath),
+            op_success_prob: op_success_prob,
+            msg_success_prob: msg_success_prob,
         }
     }
 
