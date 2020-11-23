@@ -170,7 +170,11 @@ impl Participant {
         );
 
         self.log.append(&vote);
-        self.send_unreliable(vote);
+        let send_succeeded = self.send_unreliable(vote);
+
+        if !send_succeeded {
+            info!("participant_{} failed to send {:?}, {:?}", self.id, result, request);
+        }
 
         trace!("exit participant::perform_operation");
     }

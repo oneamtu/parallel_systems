@@ -21,7 +21,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-const CLIENT_RECV_SLEEP_DURATION: Duration = Duration::from_nanos(50);
+const CLIENT_RECV_SLEEP_DURATION: Duration = Duration::from_nanos(100);
+const PARTICIPANT_RECV_TIMEOUT_DURATION: Duration = Duration::from_millis(30);
 const EXIT_SLEEP_DURATION: Duration = Duration::from_millis(10);
 static SENDER_ID: &'static str = "coordinator";
 
@@ -200,18 +201,20 @@ impl Coordinator {
     ///
     fn send_coordinator_proposal(&mut self, request: &ProtocolMessage) {
         debug!("coordinator::propose for {:?}", request);
+        let proposal = ProtocolMessage::generate(
+            MessageType::CoordinatorPropose,
+            request.txid,
+            SENDER_ID.to_string(),
+            request.opid,
+        );
+        self.log.append(&proposal);
+
         // retain successful sends - drop disconnected participants
         self.participant_channels.retain(|name, (tx, _)| {
-            let proposal = ProtocolMessage::generate(
-                MessageType::CoordinatorPropose,
-                request.txid,
-                SENDER_ID.to_string(),
-                request.opid,
-            );
-            match tx.send(proposal) {
+            match tx.send(proposal.clone()) {
                 Ok(_) => true,
                 Err(err) => {
-                    error!("{} err/disconnected - {:?}", name, err);
+                    info!("{} err/disconnected - {:?}", name, err);
                     false
                 }
             }
@@ -232,8 +235,7 @@ impl Coordinator {
         // even though we could "optimistically" quit early if we know
         // it will be an abort and broadcast that; but for now let's flush the pipe
         for (participant_name, (_, participant_rx)) in self.participant_channels.iter() {
-            //TODO: recv_timeout
-            request_status = match participant_rx.recv() {
+            request_status = match participant_rx.recv_timeout(PARTICIPANT_RECV_TIMEOUT_DURATION) {
                 Ok(response) => {
                     assert!(response.txid == request.txid);
 
@@ -242,13 +244,13 @@ impl Coordinator {
                         MessageType::ParticipantVoteAbort => RequestStatus::Aborted,
                         _ => unreachable!(),
                     }
-                }
-                Err(mpsc::RecvError) => {
-                    error!("{} err/disconnected", participant_name);
-                    //disconnected
-                    // TODO: remove from list
-                    // self.participant_rxs.remove(participant_name);
-                    // self.participant_txs.remove(participant_name);
+                },
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    info!("{} vote err/disconnected", participant_name);
+                    RequestStatus::Unknown
+                },
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    info!("{} vote err/timeout", participant_name);
                     RequestStatus::Unknown
                 }
             }
@@ -324,7 +326,7 @@ impl Coordinator {
             match tx.send(coordinator_commit.clone()) {
                 Ok(_) => true,
                 Err(err) => {
-                    error!("{} err/disconnected - {:?}", name, err);
+                    info!("{} err/disconnected - {:?}", name, err);
                     false
                 }
             }
@@ -345,7 +347,7 @@ impl Coordinator {
         match client_tx.send(client_response) {
             Ok(_) => (),
             Err(err) => {
-                error!("{} err/disconnected - {:?}", client_name, err);
+                info!("{} err/disconnected - {:?}", client_name, err);
                 self.client_channels.remove(client_name);
             }
         }
