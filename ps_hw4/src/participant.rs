@@ -7,17 +7,19 @@ extern crate rand;
 extern crate stderrlog;
 use message::MessageType;
 use message::ProtocolMessage;
-use message::RequestStatus;
+// use message::RequestStatus;
 use oplog;
 use participant::rand::prelude::*;
-use std::collections::HashMap;
-use std::sync::atomic::AtomicI32;
+// use std::collections::HashMap;
+// use std::sync::atomic::AtomicI32;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
+// use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+
+const EXIT_SLEEP_DURATION: Duration = Duration::from_millis(10);
 
 ///
 /// ParticipantState
@@ -36,7 +38,8 @@ pub enum ParticipantState {
 ///
 #[derive(Debug)]
 pub struct Participant {
-    id: i32,
+    pub id: i32,
+    pub name: String,
     running: Arc<AtomicBool>,
     state: ParticipantState,
     tx: Sender<ProtocolMessage>,
@@ -44,7 +47,9 @@ pub struct Participant {
     log: oplog::OpLog,
     op_success_prob: f64,
     msg_success_prob: f64,
-    // TODO...
+    successful_ops: usize,
+    failed_ops: usize,
+    unknown_ops: usize,
 }
 
 ///
@@ -71,6 +76,7 @@ impl Participant {
     ///
     pub fn new(
         i: i32,
+        name: String,
         running: Arc<AtomicBool>,
         tx: Sender<ProtocolMessage>,
         rx: Receiver<ProtocolMessage>,
@@ -81,12 +87,16 @@ impl Participant {
         Participant {
             state: ParticipantState::Quiescent,
             id: i,
+            name: name,
             running: running,
             tx: tx,
             rx: rx,
             log: oplog::OpLog::new(logpath),
             op_success_prob: op_success_prob,
             msg_success_prob: msg_success_prob,
+            successful_ops: 0,
+            failed_ops: 0,
+            unknown_ops: 0,
         }
     }
 
@@ -101,11 +111,9 @@ impl Participant {
     ///       actual sending.
     ///
     pub fn send(&mut self, pm: ProtocolMessage) -> bool {
-        let result: bool = true;
+        let send_result = self.tx.send(pm);
 
-        // TODO
-
-        result
+        send_result.is_ok()
     }
 
     ///
@@ -142,22 +150,37 @@ impl Participant {
     ///       (it's ok to add parameters or return something other than
     ///       bool if it's more convenient for your design).
     ///
-    pub fn perform_operation(&mut self, request: &Option<ProtocolMessage>) -> bool {
+    pub fn perform_operation(&mut self, request: &ProtocolMessage) {
         trace!("participant::perform_operation");
 
-        let mut result: RequestStatus = RequestStatus::Unknown;
+        let result;
 
         let x: f64 = random();
         if x > self.op_success_prob {
-
-            // TODO: fail the request
+            result = MessageType::ParticipantVoteAbort;
         } else {
-
-            // TODO: request succeeds!
+            result = MessageType::ParticipantVoteCommit;
         }
 
+        let vote = ProtocolMessage::generate(
+            result,
+            request.txid,
+            self.name.clone(),
+            request.opid,
+        );
+
+        self.log.append(&vote);
+        self.send_unreliable(vote);
+
         trace!("exit participant::perform_operation");
-        result == RequestStatus::Committed
+    }
+
+    pub fn commit_result(&mut self, request: &ProtocolMessage) {
+        trace!("participant::commit_result");
+
+        self.log.append(request);
+
+        trace!("exit participant::commit_result");
     }
 
     ///
@@ -166,13 +189,9 @@ impl Participant {
     /// transaction requests made by this coordinator before exiting.
     ///
     pub fn report_status(&mut self) {
-        // TODO: maintain actual stats!
-        let global_successful_ops: usize = 0;
-        let global_failed_ops: usize = 0;
-        let global_unknown_ops: usize = 0;
         println!(
             "participant_{}:\tC:{}\tA:{}\tU:{}",
-            self.id, global_successful_ops, global_failed_ops, global_unknown_ops
+            self.id, self.successful_ops, self.failed_ops, self.unknown_ops
         );
     }
 
@@ -183,7 +202,9 @@ impl Participant {
     pub fn wait_for_exit_signal(&mut self) {
         trace!("participant_{} waiting for exit signal", self.id);
 
-        // TODO
+        while self.running.load(Ordering::SeqCst) {
+            thread::sleep(EXIT_SLEEP_DURATION);
+        }
 
         trace!("participant_{} exiting", self.id);
     }
@@ -197,7 +218,29 @@ impl Participant {
     pub fn protocol(&mut self) {
         trace!("Participant_{}::protocol", self.id);
 
-        // TODO
+        while self.running.load(Ordering::SeqCst) {
+            let protocol_message = self.rx.recv().unwrap();
+
+            match protocol_message.mtype {
+                MessageType::CoordinatorPropose => {
+                    //new proposal, unknown outcome
+                    self.unknown_ops += 1;
+                    self.perform_operation(&protocol_message)
+                },
+                MessageType::CoordinatorCommit => {
+                    self.unknown_ops -= 1;
+                    self.successful_ops += 1;
+                    self.commit_result(&protocol_message);
+                },
+                MessageType::CoordinatorAbort => {
+                    self.unknown_ops -= 1;
+                    self.failed_ops += 1;
+                    self.commit_result(&protocol_message);
+                },
+                MessageType::CoordinatorExit => break,
+                _ => unreachable!(),
+            };
+        }
 
         self.wait_for_exit_signal();
         self.report_status();

@@ -6,7 +6,6 @@ extern crate log;
 extern crate stderrlog;
 use message;
 use message::MessageType;
-use message::RequestStatus;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
@@ -24,12 +23,13 @@ const EXIT_SLEEP_DURATION: Duration = Duration::from_millis(10);
 #[derive(Debug)]
 pub struct Client {
     pub id: i32,
+    pub name: String,
     running: Arc<AtomicBool>,
     tx: Sender<message::ProtocolMessage>,
     rx: Receiver<message::ProtocolMessage>,
+    pending_requests: HashMap<i32, message::ProtocolMessage>,
     successful_ops: usize,
     failed_ops: usize,
-    unknown_ops: usize,
     request_id: i32,
 }
 
@@ -55,34 +55,22 @@ impl Client {
     ///
     pub fn new(
         i: i32,
+        name: String,
         tx: Sender<message::ProtocolMessage>,
         rx: Receiver<message::ProtocolMessage>,
         running: Arc<AtomicBool>,
     ) -> Client {
         Client {
             id: i,
+            name: name,
             running: running,
             tx: tx,
             rx: rx,
+            pending_requests: HashMap::new(),
             successful_ops: 0,
             failed_ops: 0,
-            unknown_ops: 0,
             request_id: 0,
         }
-    }
-
-    ///
-    /// wait_for_exit_signal(&mut self)
-    /// wait until the running flag is set by the CTRL-C handler
-    ///
-    pub fn wait_for_exit_signal(&mut self) {
-        trace!("Client_{} waiting for exit signal", self.id);
-
-        while self.running.load(Ordering::SeqCst) {
-            thread::sleep(EXIT_SLEEP_DURATION);
-        }
-
-        trace!("Client_{} exiting", self.id);
     }
 
     ///
@@ -93,25 +81,24 @@ impl Client {
         trace!("Client_{}::send_next_operation", self.id);
 
         // create a new request with a unique TXID.
-        let request_id: i32 = 0;
         let txid = TXID_COUNTER.fetch_add(1, Ordering::SeqCst);
 
         info!(
             "Client {} request({})->txid:{} called",
-            self.id, request_id, txid
+            self.id, self.request_id, txid
         );
         let pm = message::ProtocolMessage::generate(
             MessageType::ClientRequest,
             txid,
-            format!("Client_{}", self.id),
-            request_id,
+            self.name.clone(),
+            self.request_id,
         );
 
         self.request_id += 1;
 
-        info!("client {} calling send...", self.id);
-        trace!("client {} send payload {:?}", self.id, pm);
+        debug!("client {} send payload {:?}", self.id, pm);
 
+        self.pending_requests.insert(txid, pm.clone());
         self.tx.send(pm).unwrap();
 
         trace!("Client_{}::exit send_next_operation", self.id);
@@ -124,18 +111,22 @@ impl Client {
     /// not fail in this simulation
     ///
     pub fn recv_result(&mut self) {
-        info!("Client_{}::recv_result", self.id);
+        debug!("Client_{}::recv_result", self.id);
 
         let pm = self.rx.recv().unwrap();
 
         match pm.mtype {
             MessageType::ClientResultCommit => self.successful_ops += 1,
             MessageType::ClientResultAbort => self.failed_ops += 1,
+            MessageType::CoordinatorExit => return,
             _ => panic!("Unknown MessageType for message {:?}", pm),
         }
 
-        trace!("Client_{} receive payload {:?}", self.id, pm);
-        trace!("Client_{}::exit recv_result", self.id);
+        let pending_request = self.pending_requests.remove(&pm.txid).unwrap();
+
+        assert!(pm.opid == pending_request.opid);
+
+        debug!("Client_{} received payload {:?}", self.id, pm);
     }
 
     ///
@@ -146,8 +137,22 @@ impl Client {
     pub fn report_status(&mut self) {
         println!(
             "Client_{}:\tC:{}\tA:{}\tU:{}",
-            self.id, self.successful_ops, self.failed_ops, self.unknown_ops
+            self.id, self.successful_ops, self.failed_ops, self.pending_requests.len()
         );
+    }
+
+    ///
+    /// wait_for_exit_signal(&mut self)
+    /// wait until the running flag is set by the CTRL-C handler
+    ///
+    pub fn wait_for_exit_signal(&mut self) {
+        debug!("Client_{} waiting for exit signal", self.id);
+
+        while self.running.load(Ordering::SeqCst) {
+            thread::sleep(EXIT_SLEEP_DURATION);
+        }
+
+        trace!("Client_{} exiting", self.id);
     }
 
     ///
@@ -159,10 +164,11 @@ impl Client {
     ///
     pub fn protocol(&mut self, n_requests: i32) {
         // run the 2PC protocol for each of n_requests
-
         for _ in 0..n_requests {
-            self.send_next_operation();
-            self.recv_result();
+            if self.running.load(Ordering::SeqCst) {
+                self.send_next_operation();
+                self.recv_result();
+            }
         }
 
         // wait for signal to exit

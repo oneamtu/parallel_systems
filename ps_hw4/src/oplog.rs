@@ -55,16 +55,15 @@ impl OpLog {
             lf: tlf,
         }
     }
-    pub fn append(&mut self, t: message::MessageType, tid: i32, sender: String, op: i32) {
+    pub fn append(&mut self, pm: &message::ProtocolMessage) {
         let lck = Arc::clone(&self.log_arc);
         let mut log = lck.lock().unwrap();
         self.seqno += 1;
         let id = self.seqno;
-        let pm = message::ProtocolMessage::generate(t, tid, sender, op);
         serde_json::to_writer(&mut self.lf, &pm).unwrap();
         writeln!(&mut self.lf).unwrap();
         self.lf.flush().unwrap();
-        log.insert(id, pm);
+        log.insert(id, pm.clone());
     }
     pub fn read(&mut self, offset: &i32) -> message::ProtocolMessage {
         let lck = Arc::clone(&self.log_arc);

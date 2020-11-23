@@ -54,8 +54,9 @@ fn register_clients(
     // register clients with coordinator (set up communication channels and sync objects)
     // add client to the vector and return the vector.
     for i in 0..n_clients {
-        let (tx, rx) = coordinator.client_join(format!("Client {}", i));
-        let client = Client::new(i, tx, rx, running.clone());
+        let name = format!("client_{}", i);
+        let (tx, rx) = coordinator.client_join(name.clone());
+        let client = Client::new(i, name, tx, rx, running.clone());
 
         clients.push(client);
     }
@@ -102,13 +103,15 @@ fn register_participants(
     // register participants with coordinator (set up communication channels and sync objects)
     // add client to the vector and return the vector.
     for i in 0..n_participants {
-        let (tx, rx) = coordinator.participant_join(format!("Participant {}", i));
+        let (tx, rx) = coordinator.participant_join(format!("participant_{}", i));
+        let name = format!("Participant_{}", i);
         let participant = Participant::new(
             i,
+            name,
             running.clone(),
             tx,
             rx,
-            format!("{}//{}.log", logpathbase, i),
+            format!("{}//participant_{}.log", logpathbase, i),
             op_success_prob,
             msg_success_prob,
         );
@@ -206,11 +209,11 @@ fn run(opts: &tpcoptions::TPCOptions) {
         opts.success_probability_msg,
     );
 
-    let handle = thread::spawn(move || coordinator.protocol());
-    handles.push(handle);
-
     launch_participants(participants, &mut handles);
     launch_clients(clients, opts.num_requests, &mut handles);
+
+    let handle = thread::spawn(move || coordinator.protocol());
+    handles.push(handle);
 
     // wait for clients, participants, and coordinator here...
     for handle in handles {
