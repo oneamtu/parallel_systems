@@ -44,7 +44,7 @@ pub struct Coordinator {
     client_channels: HashMap<String, (Sender<ProtocolMessage>, Receiver<ProtocolMessage>)>,
     participant_channels: HashMap<String, (Sender<ProtocolMessage>, Receiver<ProtocolMessage>)>,
     running: Arc<AtomicBool>,
-    success_prob: f64,
+    // success_prob: f64,
     successful_ops: usize,
     failed_ops: usize,
     unknown_ops: usize,
@@ -70,11 +70,11 @@ impl Coordinator {
     ///     r: atomic bool --> still running?
     ///     success_prob --> probability operations/sends succeed
     ///
-    pub fn new(log: Box<dyn MessageLog + Send>, running: &Arc<AtomicBool>, success_prob: f64) -> Coordinator {
+    pub fn new(log: Box<dyn MessageLog + Send>, running: &Arc<AtomicBool>, _success_prob: f64) -> Coordinator {
         Coordinator {
             state: CoordinatorState::Quiescent,
             log: log,
-            success_prob: success_prob,
+            // success_prob: success_prob,
             client_channels: HashMap::new(),
             participant_channels: HashMap::new(),
             running: running.clone(),

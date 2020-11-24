@@ -40,7 +40,7 @@ pub struct Participant {
     pub id: i32,
     pub name: String,
     running: Arc<AtomicBool>,
-    state: ParticipantState,
+    // state: ParticipantState,
     tx: Sender<ProtocolMessage>,
     rx: Receiver<ProtocolMessage>,
     log: Box<dyn MessageLog + Send>,
@@ -84,7 +84,7 @@ impl Participant {
         msg_success_prob: f64,
     ) -> Participant {
         Participant {
-            state: ParticipantState::Quiescent,
+            // state: ParticipantState::Quiescent,
             id: i,
             name: name,
             running: running,
