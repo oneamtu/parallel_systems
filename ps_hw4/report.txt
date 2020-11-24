@@ -1,0 +1,66 @@
+=== Part 1
+
+I started with the goal of making the simulation work end-to-end. First I made sure all of the clients, coordinator, participants
+and channels are set up correctly, and that clients are sending their payloads.
+
+From the initial sketches I realized the coordinator is a bottleneck, but since throughput is not the goal, I decided to go for
+a simple sequential coordinator approach, although the coordinator should be able to handle multiple requests
+concurrently. In thinking of these advanced use cases, I realized that this would mean the coordinator and other actors would
+need to track the different pending requests more accurately - but for the initial implementation I opted for a simple flow
+and just incrementing/decrementing operation counters. This also simplified some of the state tracking, since the coordinator
+would always write the last request to the log before quitting.
+
+Developing in rust definitely has advantages in terms of managing shared and non-shared state - using the ownership
+and borrowing mechanisms, all the different actors have ownership of the data they need; any truly shared state
+is wrapped with the atomic reference counter (arc). Starting from the skeleton code and getting to the initial end-to-end
+run, I only ran the code twice, most of the error "handling" being done at the compilation step. The only run-time errors I got
+were during the process end/clean-up getting unhandled errors in the channels, which was a conscious decision on my part (and also
+highlighted by compiler warnings); otherwise the code pretty much worked without a hitch, which makes for a good development
+experience. The comparison I could draw is with test-driven-development, except the compiler is just checking borrowing/ownership,
+type compatibility and enumeration exhaustiveness rather than behavior.
+
+As convenient as it is, I had a particularly interesting challenge doing something relatively simple - iterating over an array,
+and then removing an item in the same method; even with explicit scoping that I thought would return the borrowed &self reference
+so I can reuse it, the compiler still yelled at me - apparently a known issue
+https://github.com/rust-lang/rust/issues/21906#issuecomment-460963210.
+And I did speak too soon on running it w/o errors - I stumbled into a behavior error; the compiler can't save me from that I'm
+afraid.
+
+The first improvement I made was to coordinator client request handling - initially designed as an event loop,
+with the coordinator doing try_recv on each available client channels and processing the next available request;
+technically it's not a "fair" algorithm since it favors the channels
+that it queries first, so it doesn't try to handle requests in an equitable fashion. One way it could do that is by
+collecting "batches" of requests each round, or keeping track of the current iterator. I opted to implement
+the "batch" requests to make it both more "fair" but also to potentially increase throughput down the line, once the
+coordinator can handle multiple requests concurrently.
+
+=== Part 2
+
+With this solution passing the correctness check, I extended the participant to also sometimes drop vote sends; adding
+the new branching logic was as straightforward as replacing the recv with recv_timeout and adding the new error checking
+branches that are missing; another case where the compiler constraint shines.
+
+Once I started thinking about making the solution even more robust, and also performant, I quickly bumped into the 2 generals
+problem - each node doesn't know what it doesn't know; my current implementation makes some assumption regarding the order of
+operations in the coordinator and participant, that they are generally "nice" and not sending messages out of order, etc.
+
+=== EC: commitlog
+
+The next enhancement I added was optionally using commitlog - https://docs.rs/commitlog/0.1.2/commitlog/index.html for
+fault-tolerant logging. This was a good time to try out rust's trait mechanism; I added a MessageLogger trait that declares
+the `append` method. Thus the coordinator and participant can use any type that implements this trait generically.
+Since the type can dynamically be chosen at run-time, it needs to be heap allocated - Box allowed me to do that,
+and the `dyn` keyword allows painless dynamic dispatching via an built-in vtable mechanism, reminiscent of C++ inheritance.
+Doing this allowed me to both support the original `OpLog`, and a new `CommitOpLog` that wraps the commitlog.
+You can try the new behavior by passing `--use-commit-log`:
+
+  ./target/debug/cs380p-2pc -s .999 -S .999 -c 20 -p 30 -r 10 -m run -v 2 --use-commit-log
+
+You will get a `{logpathbase}/commit_log/` directory with all of the log subdirectories.
+
+I also added a new checker that checks the new log format in commitlog_checker.rs - same code as checker,
+compatible with the new format (the checker did too much to be neatly abstracted by an interface).
+
+=== Time
+
+I spent 25 hours on this lab + 5 hours reading the rust docs and rust by example. I enjoyed it!
