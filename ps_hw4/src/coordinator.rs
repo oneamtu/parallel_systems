@@ -22,7 +22,7 @@ use std::thread;
 use std::time::Duration;
 
 const CLIENT_RECV_SLEEP_DURATION: Duration = Duration::from_nanos(100);
-const PARTICIPANT_RECV_TIMEOUT_DURATION: Duration = Duration::from_millis(30);
+const PARTICIPANT_RECV_TIMEOUT_DURATION: Duration = Duration::from_millis(50);
 const EXIT_SLEEP_DURATION: Duration = Duration::from_millis(10);
 static SENDER_ID: &'static str = "coordinator";
 
@@ -233,23 +233,34 @@ impl Coordinator {
         // even though we could "optimistically" quit early if we know
         // it will be an abort and broadcast that; but for now let's flush the pipe
         for (participant_name, (_, participant_rx)) in self.participant_channels.iter() {
-            request_status = match participant_rx.recv_timeout(PARTICIPANT_RECV_TIMEOUT_DURATION) {
-                Ok(response) => {
-                    assert!(response.txid == request.txid);
+            loop {
+                let mut retry = false;
 
-                    match response.mtype {
-                        MessageType::ParticipantVoteCommit => request_status,
-                        MessageType::ParticipantVoteAbort => RequestStatus::Aborted,
-                        _ => unreachable!(),
+                request_status = match participant_rx.recv_timeout(PARTICIPANT_RECV_TIMEOUT_DURATION) {
+                    Ok(response) if response.txid == request.txid => {
+                        match response.mtype {
+                            MessageType::ParticipantVoteCommit => request_status,
+                            MessageType::ParticipantVoteAbort => RequestStatus::Aborted,
+                            _ => unreachable!(),
+                        }
+                    },
+                    Ok(response) if response.txid < request.txid => {
+                        retry = true;
+                        RequestStatus::Unknown
+                    },
+                    Ok(_) => unreachable!(), // future requests?
+                    Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        info!("{} vote err/disconnected", participant_name);
+                        RequestStatus::Unknown
+                    },
+                    Err(mpsc::RecvTimeoutError::Timeout) => {
+                        info!("{} vote err/timeout", participant_name);
+                        RequestStatus::Unknown
                     }
-                },
-                Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    info!("{} vote err/disconnected", participant_name);
-                    RequestStatus::Unknown
-                },
-                Err(mpsc::RecvTimeoutError::Timeout) => {
-                    info!("{} vote err/timeout", participant_name);
-                    RequestStatus::Unknown
+                };
+
+                if !retry {
+                    break
                 }
             }
         }

@@ -6,6 +6,7 @@ extern crate stderrlog;
 use std::thread;
 use std::thread::JoinHandle;
 pub mod checker;
+pub mod commitlog_checker;
 pub mod client;
 pub mod coordinator;
 pub mod commit_op_log;
@@ -207,11 +208,11 @@ fn run(opts: &tpcoptions::TPCOptions) {
     // create a coordinator, create and register clients and participants
     // launch threads for all, and wait on handles.
     let coordinator_log: Box<dyn MessageLog + Send> = if opts.commit_log {
-        let cpath = format!("{}//{}", opts.logpath, "coordinator.log");
-        Box::new(oplog::OpLog::new(cpath))
-    } else {
         let cpath = format!("{}//commit_log//{}", opts.logpath, "coordinator");
         Box::new(commit_op_log::CommitOpLog::new(cpath))
+    } else {
+        let cpath = format!("{}//{}", opts.logpath, "coordinator.log");
+        Box::new(oplog::OpLog::new(cpath))
     };
 
     let mut coordinator: Coordinator;
@@ -257,6 +258,12 @@ fn main() {
 
     match opts.mode.as_ref() {
         "run" => run(&opts),
+        "check" if opts.commit_log => commitlog_checker::check_last_run(
+            opts.num_clients,
+            opts.num_requests,
+            opts.num_participants,
+            &opts.logpath.to_string(),
+        ),
         "check" => checker::check_last_run(
             opts.num_clients,
             opts.num_requests,

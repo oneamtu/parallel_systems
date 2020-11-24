@@ -82,7 +82,7 @@ impl ProtocolMessage {
             opid: oid,
         }
     }
-    pub fn from_string(line: &String) -> ProtocolMessage {
+    pub fn from_string(line: &str) -> ProtocolMessage {
         let data: Value = serde_json::from_str(&line.to_string()).unwrap();
         let pm: ProtocolMessage = serde_json::from_value(data).unwrap();
         pm

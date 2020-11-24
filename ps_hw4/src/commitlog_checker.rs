@@ -1,10 +1,14 @@
 //!
-//! checker
+//! commitlog_checker
+//!
+//! Original doc:
 //! Tools for checking output logs produced by the _T_wo _P_hase _C_ommit
 //! project in run mode. Exports a single public function called check_last_run
 //! that accepts a directory where client, participant, and coordinator log files
 //! are found, and the number of clients, participants. Loads and analyses
 //! log files to check a handful of correctness invariants.
+//!
+//! Modified to work when --use-commit-log is passed
 //!
 extern crate clap;
 extern crate ctrlc;
@@ -13,7 +17,7 @@ extern crate stderrlog;
 use message;
 use message::MessageType;
 use message::ProtocolMessage;
-use oplog::OpLog;
+use commit_op_log::CommitOpLog;
 use std::collections::HashMap;
 
 ///
@@ -34,11 +38,9 @@ fn check_participant(
     participant: &String,
     ncommit: usize,
     nabort: usize,
-    ccommitted: &HashMap<i32, ProtocolMessage>,
-    plog: &HashMap<i32, ProtocolMessage>,
+    ccommitted: &HashMap<u64, ProtocolMessage>,
+    plog: &HashMap<u64, ProtocolMessage>,
 ) -> bool {
-    debug!("Checking participant {}", participant);
-
     let mut result = true;
     let pcommitted = plog
         .iter()
@@ -53,9 +55,9 @@ fn check_participant(
         .filter(|e| (*e.1).mtype == MessageType::CoordinatorAbort)
         .map(|(k, v)| (k.clone(), v.clone()));
 
-    let mcommit: HashMap<i32, message::ProtocolMessage> = pcommitted.collect();
-    let mlcommit: HashMap<i32, message::ProtocolMessage> = plcommitted.collect();
-    let mabort: HashMap<i32, message::ProtocolMessage> = paborted.collect();
+    let mcommit: HashMap<u64, message::ProtocolMessage> = pcommitted.collect();
+    let mlcommit: HashMap<u64, message::ProtocolMessage> = plcommitted.collect();
+    let mabort: HashMap<u64, message::ProtocolMessage> = paborted.collect();
     let npcommit = mcommit.len();
     let nlcommit = mlcommit.len();
     let npabort = mabort.len();
@@ -74,7 +76,9 @@ fn check_participant(
                 _foundtxid += 1;
             }
         }
+        debug!("v {:?}", v);
         for (_k3, v3) in mlcommit.iter() {
+            debug!("v3 {:?}", v3);
             // handle the case where the participant simply doesn't get
             // the global commit message from the coordinator. If the
             // coordinator committed the transaction, the participant
@@ -119,21 +123,20 @@ pub fn check_last_run(n_clients: i32, n_requests: i32, n_participants: i32, logp
     let mut logs = HashMap::new();
     for pid in 0..n_participants {
         let pid_str = format!("participant_{}", pid);
-        let plogpath = format!("{}//{}.log", logpathbase, pid_str);
-        let plog = OpLog::from_file(plogpath);
-        logs.insert(pid_str, plog);
+        let plogpath = format!("{}//commit_log//{}", logpathbase, pid_str);
+        let plog = CommitOpLog::from_file(plogpath);
+        logs.insert(pid_str, plog.to_hash());
     }
-    let clogpath = format!("{}//{}", logpathbase, "coordinator.log");
-    let clog = OpLog::from_file(clogpath);
+    let clogpath = format!("{}//commit_log//{}", logpathbase, "coordinator");
+    let clog = CommitOpLog::from_file(clogpath);
+    let cmap = clog.to_hash();
 
-    let lck = clog.arc();
-    let cmap = lck.lock().unwrap();
-    let committed: HashMap<i32, message::ProtocolMessage> = cmap
+    let committed: HashMap<u64, message::ProtocolMessage> = cmap
         .iter()
         .filter(|e| (*e.1).mtype == MessageType::CoordinatorCommit)
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
-    let aborted: HashMap<i32, message::ProtocolMessage> = cmap
+    let aborted: HashMap<u64, message::ProtocolMessage> = cmap
         .iter()
         .filter(|e| (*e.1).mtype == MessageType::CoordinatorAbort)
         .map(|(k, v)| (k.clone(), v.clone()))
@@ -142,8 +145,7 @@ pub fn check_last_run(n_clients: i32, n_requests: i32, n_participants: i32, logp
     let nabort = aborted.len();
 
     for (p, v) in logs.iter() {
-        let plck = v.arc();
-        let plog = plck.lock().unwrap();
-        check_participant(p, ncommit, nabort, &committed, &plog);
+        check_participant(p, ncommit, nabort, &committed, &v);
     }
 }
+
