@@ -30,6 +30,7 @@ pub struct TPCOptions {
     pub num_participants: i32, // number of participants in 2PC protocol (not including coordinator)
     pub verbosity: usize, // integer verbosity level. experiment with 0 (default) to 5 (fire-hose of output)
     pub mode: String,     // "run" or "check"
+    pub commit_log: bool,     // use commitlog
     pub logpath: String,  // directory for client, participant, and coordinator logs
 }
 
@@ -53,7 +54,7 @@ impl TPCOptions {
 
         let matches = App::new("cs380p-2pc")
             .version("0.1.0")
-            .author("Chris Rossbach <rossbach@cs.utexas.edu>")
+            .author("Chris Rossbach <rossbach@cs.utexas.edu>; Octavian Neamtu <verymeta@utexas.edu>")
             .about("2pc exercise written in Rust")
             .arg(
                 Arg::with_name("success_probability_ops")
@@ -104,6 +105,13 @@ impl TPCOptions {
                     .takes_value(true)
                     .help("mode--\"run\" runs 2pc, \"check\" checks logs produced by previous run"),
             )
+            .arg(
+                Arg::with_name("use-commit-log")
+                    .long("use-commit-log")
+                    .required(false)
+                    .takes_value(false)
+                    .help("uses fault tolerant commit_log instead of default file log"),
+            )
             .get_matches();
 
         let _mode = matches.value_of("mode").unwrap_or(default_mode);
@@ -137,6 +145,8 @@ impl TPCOptions {
             .unwrap_or(default_verbosity)
             .parse::<usize>()
             .unwrap();
+        let commit_log = matches
+            .is_present("use-commit-log");
         let _logpath = matches.value_of("logpath").unwrap_or(default_logpath);
 
         match _mode.as_ref() {
@@ -153,6 +163,7 @@ impl TPCOptions {
             num_participants: n_participants,
             verbosity: _verbosity,
             mode: _mode.to_string(),
+            commit_log: commit_log,
             logpath: _logpath.to_string(),
         }
     }

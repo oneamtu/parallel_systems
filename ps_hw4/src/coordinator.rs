@@ -9,7 +9,7 @@ extern crate stderrlog;
 use message::MessageType;
 use message::ProtocolMessage;
 use message::RequestStatus;
-use oplog;
+use message_log::MessageLog;
 use std::collections::HashMap;
 // use std::sync::atomic::AtomicI32;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -38,15 +38,13 @@ pub enum CoordinatorState {
 
 /// Coordinator
 /// struct maintaining state for coordinator
-#[derive(Debug)]
 pub struct Coordinator {
     state: CoordinatorState,
-    log: oplog::OpLog,
+    log: Box<dyn MessageLog + Send>,
     client_channels: HashMap<String, (Sender<ProtocolMessage>, Receiver<ProtocolMessage>)>,
     participant_channels: HashMap<String, (Sender<ProtocolMessage>, Receiver<ProtocolMessage>)>,
     running: Arc<AtomicBool>,
-    // TODO: rename
-    op_success_prob: f64,
+    success_prob: f64,
     successful_ops: usize,
     failed_ops: usize,
     unknown_ops: usize,
@@ -72,11 +70,11 @@ impl Coordinator {
     ///     r: atomic bool --> still running?
     ///     success_prob --> probability operations/sends succeed
     ///
-    pub fn new(logpath: String, running: &Arc<AtomicBool>, success_prob: f64) -> Coordinator {
+    pub fn new(log: Box<dyn MessageLog + Send>, running: &Arc<AtomicBool>, success_prob: f64) -> Coordinator {
         Coordinator {
             state: CoordinatorState::Quiescent,
-            log: oplog::OpLog::new(logpath),
-            op_success_prob: success_prob,
+            log: log,
+            success_prob: success_prob,
             client_channels: HashMap::new(),
             participant_channels: HashMap::new(),
             running: running.clone(),

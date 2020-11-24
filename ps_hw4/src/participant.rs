@@ -8,7 +8,7 @@ extern crate stderrlog;
 use message::MessageType;
 use message::ProtocolMessage;
 // use message::RequestStatus;
-use oplog;
+use message_log::MessageLog;
 use participant::rand::prelude::*;
 // use std::collections::HashMap;
 // use std::sync::atomic::AtomicI32;
@@ -36,7 +36,6 @@ pub enum ParticipantState {
 /// structure for maintaining per-participant state
 /// and communication/synchronization objects to/from coordinator
 ///
-#[derive(Debug)]
 pub struct Participant {
     pub id: i32,
     pub name: String,
@@ -44,7 +43,7 @@ pub struct Participant {
     state: ParticipantState,
     tx: Sender<ProtocolMessage>,
     rx: Receiver<ProtocolMessage>,
-    log: oplog::OpLog,
+    log: Box<dyn MessageLog + Send>,
     op_success_prob: f64,
     msg_success_prob: f64,
     successful_ops: usize,
@@ -80,7 +79,7 @@ impl Participant {
         running: Arc<AtomicBool>,
         tx: Sender<ProtocolMessage>,
         rx: Receiver<ProtocolMessage>,
-        logpath: String,
+        log: Box<dyn MessageLog + Send>,
         op_success_prob: f64,
         msg_success_prob: f64,
     ) -> Participant {
@@ -91,7 +90,7 @@ impl Participant {
             running: running,
             tx: tx,
             rx: rx,
-            log: oplog::OpLog::new(logpath),
+            log: log,
             op_success_prob: op_success_prob,
             msg_success_prob: msg_success_prob,
             successful_ops: 0,

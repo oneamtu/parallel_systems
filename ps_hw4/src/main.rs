@@ -8,13 +8,16 @@ use std::thread::JoinHandle;
 pub mod checker;
 pub mod client;
 pub mod coordinator;
+pub mod commit_op_log;
 pub mod message;
+pub mod message_log;
 pub mod oplog;
 pub mod participant;
 pub mod tpcoptions;
 use client::Client;
 use coordinator::Coordinator;
 use participant::Participant;
+use message_log::MessageLog;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -95,6 +98,7 @@ fn register_participants(
     coordinator: &mut Coordinator,
     n_participants: i32,
     logpathbase: &String,
+    commit_log: bool,
     running: &Arc<AtomicBool>,
     op_success_prob: f64,
     msg_success_prob: f64,
@@ -105,13 +109,22 @@ fn register_participants(
     for i in 0..n_participants {
         let (tx, rx) = coordinator.participant_join(format!("participant_{}", i));
         let name = format!("Participant_{}", i);
+
+        let participant_log: Box<dyn MessageLog + Send> = if commit_log {
+            let path = format!("{}//commit_log//participant_{}", logpathbase, i);
+            Box::new(commit_op_log::CommitOpLog::new(path))
+        } else {
+            let path = format!("{}//participant_{}.log", logpathbase, i);
+            Box::new(oplog::OpLog::new(path))
+        };
+
         let participant = Participant::new(
             i,
             name,
             running.clone(),
             tx,
             rx,
-            format!("{}//participant_{}.log", logpathbase, i),
+            participant_log,
             op_success_prob,
             msg_success_prob,
         );
@@ -193,17 +206,25 @@ fn run(opts: &tpcoptions::TPCOptions) {
 
     // create a coordinator, create and register clients and participants
     // launch threads for all, and wait on handles.
-    let cpath = format!("{}//{}", opts.logpath, "coordinator.log");
+    let coordinator_log: Box<dyn MessageLog + Send> = if opts.commit_log {
+        let cpath = format!("{}//{}", opts.logpath, "coordinator.log");
+        Box::new(oplog::OpLog::new(cpath))
+    } else {
+        let cpath = format!("{}//commit_log//{}", opts.logpath, "coordinator");
+        Box::new(commit_op_log::CommitOpLog::new(cpath))
+    };
+
     let mut coordinator: Coordinator;
     let clients: Vec<Client>;
     let participants: Vec<Participant>;
 
-    coordinator = Coordinator::new(cpath, &running, 1.0);
+    coordinator = Coordinator::new(coordinator_log, &running, 1.0);
     clients = register_clients(&mut coordinator, opts.num_clients, &running);
     participants = register_participants(
         &mut coordinator,
         opts.num_participants,
         &opts.logpath,
+        opts.commit_log,
         &running,
         opts.success_probability_ops,
         opts.success_probability_msg,
