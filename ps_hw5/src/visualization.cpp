@@ -123,7 +123,7 @@ void drawParticle2D(const struct particle *particle) {
   glColor3f(1.0f, 0.1f, 0.1f);
 
   glVertex2f(WIN_X(particle->x), WIN_Y(particle->y));
-  glVertex2f(WIN_X(particle->x + particle->v_x*0.05f), WIN_Y(particle->y + particle->v_y*0.05f));
+  glVertex2f(WIN_X(particle->x + particle->v_x), WIN_Y(particle->y + particle->v_y));
 
   glEnd();
 }

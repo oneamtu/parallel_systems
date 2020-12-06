@@ -1,7 +1,9 @@
 #include "barnes_hut_sequential.h"
 
+#include <cmath>
+#include <csignal>
+
 #include "visualization.h"
-#include <math.h>
 
 quad_tree *insert_particle_into_quad_tree(quad_tree *node, struct particle *particle,
     double partition_x, double partition_y, double s_x, double s_y) {
@@ -117,7 +119,7 @@ void compute_force(const struct particle *p,
       // external node, compute
       auto dx = node->p->x - p->x;
       auto dy = node->p->y - p->y;
-      auto d = fmin(sqrt((dx * dx) + (dy * dy)), RLIMIT);
+      auto d = fmax(sqrt((dx * dx) + (dy * dy)), RLIMIT);
       auto d3 = d*d*d;
 
       *a_x += (G*node->p->mass*dx)/d3;
@@ -127,7 +129,7 @@ void compute_force(const struct particle *p,
     // ratio under theta, approximate
     auto dx = node->com_x/node->n_particles - p->x;
     auto dy = node->com_y/node->n_particles - p->y;
-    auto d = fmin(sqrt((dx * dx) + (dy * dy)), RLIMIT);
+    auto d = fmax(sqrt((dx * dx) + (dy * dy)), RLIMIT);
     auto d3 = d*d*d;
 
     *a_x += (G*(node->mass/node->n_particles)*dx)/d3;
