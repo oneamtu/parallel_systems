@@ -1,0 +1,3 @@
+Obs:
+
+Different approaches to the parallel algorithm. Interesting challenges in locality and load balancing
