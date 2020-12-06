@@ -1,3 +1,6 @@
 Obs:
 
 Different approaches to the parallel algorithm. Interesting challenges in locality and load balancing
+
+theta s/d ratio - do you have to account for own mass?
+no if \theta < 1/sqrt(2)

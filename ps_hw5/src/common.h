@@ -7,7 +7,6 @@
 // constants
 const static double G = 0.0001;
 const static double RLIMIT = 0.03;
-const static double DT = 0.05;
 
 const static double MIN_X = 0.0;
 const static double MAX_X = 4.0;

@@ -1,5 +1,7 @@
 #pragma once
 
+static const double OUT_OF_BOUNDS_MASS = -1.0f;
+
 struct particle {
     int index;
     double x;
@@ -18,6 +20,8 @@ struct quad_tree {
 
   double partition_x;
   double partition_y;
+  double s_x;
+  double s_y;
 
   int n_particles;
 

@@ -23,10 +23,16 @@ static GLFWwindow* window;
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
   if (key == GLFW_KEY_Q && action == GLFW_PRESS) {
+    DEBUG_OUT("GLFW_KEY_Q -> quit");
+
     quit = true;
   } else if (key == GLFW_KEY_J && action == GLFW_PRESS) {
+    DEBUG_OUT("GLFW_KEY_J -> next_frame");
+
     next_frame = true;
-  } else if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
+  } else if (key == GLFW_KEY_L && action == GLFW_PRESS) {
+    DEBUG_OUT("GLFW_KEY_L -> running");
+
     running = !running;
   }
 }
@@ -61,7 +67,7 @@ void terminate_visualization() {
   glfwTerminate();
 }
 
-void drawOctreeBounds2D(const quad_tree *node, float len) {
+void drawOctreeBounds2D(const quad_tree *node) {
   int i;
 
   if(node == NULL || node->p != NULL) {
@@ -72,18 +78,18 @@ void drawOctreeBounds2D(const quad_tree *node, float len) {
   // set the color of lines to be white
   glColor4f(0.8f, 0.8f, 0.8f, 0.7f);
 
-  glVertex2f(WIN_X(node->partition_x), WIN_Y(node->partition_y) - len);
-  glVertex2f(WIN_X(node->partition_x), WIN_Y(node->partition_y) + len);
+  glVertex2f(WIN_X(node->partition_x), WIN_Y(node->partition_y - node->s_y));
+  glVertex2f(WIN_X(node->partition_x), WIN_Y(node->partition_y + node->s_y));
 
-  glVertex2f(WIN_X(node->partition_x) - len, WIN_Y(node->partition_y));
-  glVertex2f(WIN_X(node->partition_x) + len, WIN_Y(node->partition_y));
+  glVertex2f(WIN_X(node->partition_x - node->s_x), WIN_Y(node->partition_y));
+  glVertex2f(WIN_X(node->partition_x + node->s_x), WIN_Y(node->partition_y));
 
   glEnd();
 
-  drawOctreeBounds2D(node->nw, len/2);
-  drawOctreeBounds2D(node->ne, len/2);
-  drawOctreeBounds2D(node->sw, len/2);
-  drawOctreeBounds2D(node->se, len/2);
+  drawOctreeBounds2D(node->nw);
+  drawOctreeBounds2D(node->ne);
+  drawOctreeBounds2D(node->sw);
+  drawOctreeBounds2D(node->se);
 }
 
 void drawParticle2D(const struct particle *particle) {
@@ -117,7 +123,7 @@ void drawParticle2D(const struct particle *particle) {
   glColor3f(1.0f, 0.1f, 0.1f);
 
   glVertex2f(WIN_X(particle->x), WIN_Y(particle->y));
-  glVertex2f(WIN_X(particle->x + particle->v_x), WIN_Y(particle->y + particle->v_y));
+  glVertex2f(WIN_X(particle->x + particle->v_x*0.05f), WIN_Y(particle->y + particle->v_y*0.05f));
 
   glEnd();
 }
@@ -128,7 +134,7 @@ bool render_visualization(int n_particles,
 
   glClear(GL_COLOR_BUFFER_BIT);
 
-  drawOctreeBounds2D(root, 1.0f);
+  drawOctreeBounds2D(root);
 
   for(int i = 0; i < n_particles; i++) {
     drawParticle2D(&particles[i]);
