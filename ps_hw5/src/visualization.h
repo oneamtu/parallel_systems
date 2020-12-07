@@ -3,7 +3,7 @@
 #include "common.h"
 #include "particle.h"
 
-int init_visualization();
+int init_visualization(int *argc, char **argv);
 
 void terminate_visualization();
 

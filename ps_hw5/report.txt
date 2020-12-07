@@ -2,5 +2,31 @@ Obs:
 
 Different approaches to the parallel algorithm. Interesting challenges in locality and load balancing
 
+Scalable Parallel Formulations of the Barnes Hut Method for n - Body Simulations*
+costzone
+Grama
+
+Warren - bit hash
+Singh - ORB/costzones/90 % force computation
+
 theta s/d ratio - do you have to account for own mass?
 no if \theta < 1/sqrt(2)
+
+sudo perf record --freq=max bin/nbody -i input/nb-100.txt -o test6.txt -d 0.005 -t 0.5 -s 50000 -1
+sudo perf record --freq=max bin/nbody -i input/nb-100000.txt -o test6.txt -d 0.005 -t 0.5 -s 50 -1
+
+perf
+76.63%  nbody    nbody                   [.] update_force
+7.28%  nbody    nbody                   [.] insert_particle_into_quad_tree
+4.36%  nbody    libm-2.31.so            [.] __fmax
+2.88%  nbody    libc-2.31.so            [.] _int_malloc
+2.75%  nbody    nbody                   [.] free_quad_tree
+
+
+TODO implement
+TODO correctness
+TODO perf analysis
+
+next optimizations
+
+ - parallelize tree building, reduce malloc

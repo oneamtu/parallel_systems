@@ -22,7 +22,7 @@ void read_file(struct options_t* args,
 
   // Read input vals
   for (int i = 0; i < *n_particles; ++i) {
-    scanned = fscanf(input_f, "%d\t%lf\t%lf\t%lf\t%lf\t%lf",
+    scanned = fscanf(input_f, "%d\t%le\t%le\t%le\t%le\t%le",
         &((*particles)[i].index),
         &((*particles)[i].x),
         &((*particles)[i].y),
@@ -47,7 +47,7 @@ void write_file(struct options_t* args,
 
   // Read input vals
   for (int i = 0; i < n_particles; ++i) {
-    fprintf(output_f, "%d\t%lf\t%lf\t%lf\t%lf\t%lf\n",
+    fprintf(output_f, "%d\t%le\t%le\t%le\t%le\t%le\n",
         particles[i].index, particles[i].x, particles[i].y,
         particles[i].mass, particles[i].v_x, particles[i].v_y);
   }

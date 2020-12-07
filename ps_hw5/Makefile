@@ -1,7 +1,7 @@
 CC = mpic++
 SRCS = ./src/*.cpp
 INC = ./src/
-LIBS = -lglfw -lGL
+LIBS = -lglfw -lGL -lglut
 OPTS = --std=c++17
 
 EXEC = bin/nbody

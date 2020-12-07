@@ -9,6 +9,9 @@ struct particle {
     double mass;
     double v_x;
     double v_y;
+
+    double a_x;
+    double a_y;
 };
 
 struct quad_tree {

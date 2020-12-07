@@ -27,7 +27,7 @@ const static double MAX_Y = 4.0;
 #define DEBUG_TEST 0
 #endif
 
-#define TIMING_OUT(x) do { if (DEBUG_TEST) { std::cerr << "TIMING: " << (x) << std::endl;} } while (0)
+#define TIMING_OUT(x) do { if (TIMING_TEST) { std::cerr << "TIMING: " << (x) << std::endl;} } while (0)
 #define TIMING_PRINT(x) do { if (TIMING_TEST) { printf("TIMING: "); x;} } while (0)
 #define DEBUG_OUT(x) do { if (DEBUG_TEST) { std::cerr << "DEBUG: " << (x) << std::endl;} } while (0)
 #define DEBUG_PRINT(x) do { if (DEBUG_TEST) { printf("DEBUG: "); x;} } while (0)

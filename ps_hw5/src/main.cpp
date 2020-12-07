@@ -1,6 +1,7 @@
 #include <iostream>
 #include "argparse.h"
 #include "barnes_hut_sequential.h"
+#include "barnes_hut_mpi.h"
 #include "particle.h"
 #include "io.h"
 #include "common.h"
@@ -20,7 +21,7 @@ int main(int argc, char **argv)
   read_file(&opts, &n_particles, &particles);
 
   if (opts.visualization) {
-    init_visualization();
+    init_visualization(&argc, argv);
   }
 
   // Start timer
@@ -33,6 +34,8 @@ int main(int argc, char **argv)
     barnes_hut_sequential(&opts, n_particles, particles);
   } else {
     DEBUG_OUT("Run MPI");
+
+    barnes_hut_mpi(&opts, n_particles, particles);
   }
 
   auto end = std::chrono::high_resolution_clock::now();

@@ -105,13 +105,8 @@ void free_quad_tree(struct quad_tree *node) {
   free(node);
 }
 
-inline double dist_2(const particle *p, const quad_tree *node) {
-  return (POW2(node->com_x/node->n_particles - p->x)
-      + POW2(node->com_y/node->n_particles - p->y));
-}
-
-void compute_force(const struct particle *p,
-    const struct quad_tree *node, double theta, double *a_x, double *a_y) {
+void update_force(struct particle *p,
+    const struct quad_tree *node, double theta) {
   if (node == NULL) {
     return ;
   } else if (node->p != NULL) {
@@ -122,52 +117,41 @@ void compute_force(const struct particle *p,
       auto d = fmax(sqrt((dx * dx) + (dy * dy)), RLIMIT);
       auto d3 = d*d*d;
 
-      *a_x += (G*node->p->mass*dx)/d3;
-      *a_y += (G*node->p->mass*dy)/d3;
+      p->a_x += (G*node->p->mass*dx)/d3;
+      p->a_y += (G*node->p->mass*dy)/d3;
     }
-  } else if (POW2(node->s_x) < dist_2(p, node) * theta) {
-    // ratio under theta, approximate
+  } else {
     auto dx = node->com_x/node->n_particles - p->x;
     auto dy = node->com_y/node->n_particles - p->y;
     auto d = fmax(sqrt((dx * dx) + (dy * dy)), RLIMIT);
-    auto d3 = d*d*d;
 
-    *a_x += (G*(node->mass/node->n_particles)*dx)/d3;
-    *a_y += (G*(node->mass/node->n_particles)*dy)/d3;
-  } else {
-    // ratio over theta, recurse
-    compute_force(p, node->nw, theta, a_x, a_y);
-    compute_force(p, node->ne, theta, a_x, a_y);
-    compute_force(p, node->sw, theta, a_x, a_y);
-    compute_force(p, node->se, theta, a_x, a_y);
+    if ((node->s_x*2)/d < theta) {
+      // ratio under theta, approximate
+      auto d3 = d*d*d;
+
+      p->a_x += (G*(node->mass/node->n_particles)*dx)/d3;
+      p->a_y += (G*(node->mass/node->n_particles)*dy)/d3;
+    } else {
+      // ratio over theta, recurse
+      update_force(p, node->nw, theta);
+      update_force(p, node->ne, theta);
+      update_force(p, node->sw, theta);
+      update_force(p, node->se, theta);
+    }
   }
 }
 
-void update_forces(const struct quad_tree *root,
-    const struct quad_tree *node, double theta, double d_t) {
-  if (node == NULL) {
-    return ;
-  } else if (node->p != NULL) {
-    double a_x = 0.0f, a_y = 0.0f;
+void update_velocity_position(particle *p, double d_t) {
+    p->x += p->v_x*d_t + 0.5f*p->a_x*POW2(d_t);
+    p->y += p->v_y*d_t + 0.5f*p->a_y*POW2(d_t);
 
-    compute_force(node->p, root, theta, &a_x, &a_y);
-
-    node->p->x += node->p->v_x*d_t + 0.5f*a_x*POW2(d_t);
-    node->p->y += node->p->v_y*d_t + 0.5f*a_y*POW2(d_t);
-
-    if (node->p->x < MIN_X || node->p->x > MAX_X
-        || node->p->y < MIN_Y || node->p->y > MAX_Y) {
-      node->p->mass = OUT_OF_BOUNDS_MASS;
+    if (p->x < MIN_X || p->x > MAX_X
+        || p->y < MIN_Y || p->y > MAX_Y) {
+      p->mass = OUT_OF_BOUNDS_MASS;
     }
 
-    node->p->v_x += a_x*d_t;
-    node->p->v_y += a_y*d_t;
-  } else {
-    update_forces(root, node->nw, theta, d_t);
-    update_forces(root, node->ne, theta, d_t);
-    update_forces(root, node->sw, theta, d_t);
-    update_forces(root, node->se, theta, d_t);
-  }
+    p->v_x += p->a_x*d_t;
+    p->v_y += p->a_y*d_t;
 }
 
 void barnes_hut_sequential(const struct options_t *args,
@@ -187,7 +171,17 @@ void barnes_hut_sequential(const struct options_t *args,
       }
     }
 
-    update_forces(root, root, args->theta, args->delta);
+    for (int i = 0; i < n_particles; i++) {
+      particles[i].a_x = 0.0f;
+      particles[i].a_y = 0.0f;
+
+      update_force(particles + i, root, args->theta);
+    }
+
+    for (int i = 0; i < n_particles; i++) {
+      update_velocity_position(particles + i, args->delta);
+    }
+
     free_quad_tree(root);
   }
 }
