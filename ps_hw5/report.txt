@@ -132,6 +132,8 @@ input/nb-100000.txt:2 TIMING: P1 update_force: 756.306391
 
 ## Future optimizations
 
+I attempted to costzones (Grama '94) to help with load balancing, but did not finish it on time.
+
 The next optimizations would target parallelizing the tree building, and passing only as much data as needed
 (keeping the data local) to reduce overhead. The bit hashing algorithm presented in Warren '93 seems particularly
 interesting as a way to address data locality, and I would've loved to try an implementation out if time allowed.
