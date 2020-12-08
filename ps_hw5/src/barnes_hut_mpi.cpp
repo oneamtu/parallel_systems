@@ -68,7 +68,6 @@ void barnes_hut_mpi(const struct options_t *args) {
     partition_starts[i] = i * partition_size;
     partition_ends[i] = std::min((i + 1) * partition_size, n_particles);
     partition_sizes[i] = partition_ends[i] - partition_starts[i];
-    partition_sizes[i] = partition_ends[i] - partition_starts[i];
   }
 
   double build_tree_timing = 0.0f,

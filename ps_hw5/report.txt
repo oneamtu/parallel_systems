@@ -25,12 +25,28 @@ communication can indeed be batched, or done asynchronously, as specified in Gra
 
 # The sequential build
 
-The sequential
+Since the sequential algorithm is the benchmark or correctness, or at least consistency,
+I opted to add the OpenGL visualiztion (with some glut text) to help debug; it's always nice
+to actually see that something is working.
 
-theta s/d ratio - do you have to account for own mass?
-no if \theta < 1/sqrt(2)
+While implementing the sequential algorithm, I ran into an interesting decision -
+do I need to track whether the current node is part of the cluster we're approximating the force
+of? Once can imagine a lonely particle in one corner, and a massive cluster in the other.
+The root node of the quad tree would have its CoM in the massive cluster, thus causing a
+scenario where s/d < theta, and thus the approximation of the force to the cluster would
+include in the cluster center of mass and mass the particle we're approximating, which should
+not be the case; a particle does not interact with itself.
 
-sudo perf record --freq=max bin/nbody -i input/nb-100.txt -o test6.txt -d 0.005 -t 0.5 -s 50000 -1
+The maximal s/d in which we're collapsing the force calculation of the current particle and
+a cluster that contains itself is the scenario described, thus the d is the diagonal distance
+in a square of side s, so s/d = s/(d*sqrt(2)) = 1/sqrt(2) ~ 0.7. So values of theta < 0.7 should
+be ok to use; values greater would add more error. For my experiments I used theta = 0.35, which
+falls within the range.
+
+Once I implemented the sequential solution and spot-checked the results, I wanted to see if I was
+on track with my intuition. I used perf to check where my program spent its time
+
+```
 sudo perf record --freq=max bin/nbody -i input/nb-100000.txt -o test6.txt -d 0.005 -t 0.5 -s 50 -1
 
 perf
@@ -39,26 +55,87 @@ perf
 4.36%  nbody    libm-2.31.so            [.] __fmax
 2.88%  nbody    libc-2.31.so            [.] _int_malloc
 2.75%  nbody    nbody                   [.] free_quad_tree
+```
 
+With 76.63% of the time spent in update_force, this seemed to check out (later corroborated by timing data).
 
-implement MPI
-correctness
+# MPI & parallel
 
-extra setup/teardown
-TIMING: MPI Overall: 0.001365
-0.032
+My parallel implementation mainly targets parallelizing the force computation and particle position and velocity updating.
+At a high-level:
 
-TODO perf analysis
-  MPI breakdown
-  per particle stats
-  costzones
+ * (intro) the root reads the particles each process gets all particle information via MPI_Bcast and a custom MPI_Datatype
+ * (loop) each rank constructs the entire tree
+ * (loop) each rank computes the forces for its particles & updates their velocity and position
+ * (loop) each rank shares that information using MPI_Allgatherv
+ * (outro) the root writes the file
 
-next optimizations
+This algorithm has the benefit of re-utilizing the same primitives as the sequential one, and also has only one
+point of synchronization, not adding a lot of communication overhead.
 
- - parallelize tree building, reduce malloc
+# Speedup analysis
 
-Warren - bit hash
+## Setup
+
+I used a ruby script to produce reference files from the sequential algorithm. All iterations of the parallel
+check out against those.
+
+I took all the measurements on a Dell XPS 13 laptop with a Intel(R) Core(TM) i7-7560U CPU @ 2.40GHz processor, which has
+2 hyper-threading cores for a total of 4 virtual cores; 8 GB of physical RAM and an SSD-backed swap.
+
+I timed the end-to-end process using the chrono library high-res timers. I opted to not use the MPI_Wtime for this since
+the processes are synced by the time of the measurement (so using the root process is ok), and it also allowed me
+to include the extra MPI_Init call that the parallel process does. It's pedantic, I know; I measured the difference,
+and it's ~31 ms for MPI_Init to run, so that's pretty irrelevant when compared to the overall scale of the timings.
+
+I also added timers for each section of the algorithm, to compare the breakdown; for this part I did use MPI_Wtime().
+Per iteration times are in ms, and overall times are in s, unless noted otherwise.
+
+Each run used the arguments `-d 0.005 -t 0.35` and a fixed step size between, while varying the number of processes.
+
+## Ideal speedup
+
+Ideal speedup would be linear. We can also use Gustafson's Law to see how additional processors could help
+us scale our particle count.
+
+For our largest example, we do indeed see the update_force section take up 1463ms/1522ms ~ .96.
+That means the Gustafson ideal speedup, keeping the rest fixed, would be N + (1 - N)*.04. For 4
+processors, that's a 3.7 speedup.
+
+## Actual speedup
+
+These are the results of the speedup against the sequential run of each:
+
+input/nb-10.txt:1 speedup: 0.29
+input/nb-10.txt:2 speedup: 0.17
+input/nb-10.txt:3 speedup: 0.05
+input/nb-10.txt:4 speedup: 0.05
+input/nb-100.txt:1 speedup: 0.72
+input/nb-100.txt:2 speedup: 0.81
+input/nb-100.txt:3 speedup: 0.43
+input/nb-100.txt:4 speedup: 0.45
+input/nb-100000.txt:1 speedup: 1.01
+input/nb-100000.txt:2 speedup: 1.86
+input/nb-100000.txt:3 speedup: 1.61
+input/nb-100000.txt:4 speedup: 1.84
+
+For small numbers of particles, there are not as many force calculations; thus, the parallelization
+is overall more inefficient. Using MPI adds unjustified overhead, as seen even for 1 node vs sequential,
+and more processes result in more overhead.
+
+With the big file, we start seeing a speedup, which hints at the asymptotic powers that would lie in
+having access to more cores.
+
+Indeed, looking at just the update_force we see a ~1.92 speedup when the number of cores goes from 1 to 2.
+input/nb-100000.txt:1 TIMING: P0 update_force: 1454.020824
+input/nb-100000.txt:2 TIMING: P1 update_force: 756.306391
+
+## Future optimizations
+
+The next optimizations would target parallelizing the tree building, and passing only as much data as needed
+(keeping the data local) to reduce overhead. The bit hashing algorithm presented in Warren '93 seems particularly
+interesting as a way to address data locality, and I would've loved to try an implementation out if time allowed.
 
 # How much time did I spend?
 
-I spent
+I spent ~30 h on this lab.

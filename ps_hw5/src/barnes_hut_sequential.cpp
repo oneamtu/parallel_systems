@@ -178,7 +178,7 @@ void barnes_hut_sequential(const struct options_t *args) {
 
     quad_tree *root = build_quad_tree(n_particles, particles);
 
-    build_tree_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(
+    build_tree_timing += std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::high_resolution_clock::now() - iteration_start).count()/NS_PER_MS;
 
     if (args->visualization) {
@@ -198,7 +198,7 @@ void barnes_hut_sequential(const struct options_t *args) {
       update_force(particles + i, root, args->theta);
     }
 
-    update_force_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(
+    update_force_timing += std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::high_resolution_clock::now() - iteration_start).count()/NS_PER_MS;
 
     iteration_start = std::chrono::high_resolution_clock::now();
@@ -207,14 +207,14 @@ void barnes_hut_sequential(const struct options_t *args) {
       update_velocity_position(particles + i, args->delta);
     }
 
-    update_velocity_position_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(
+    update_velocity_position_timing += std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::high_resolution_clock::now() - iteration_start).count()/NS_PER_MS;
 
     iteration_start = std::chrono::high_resolution_clock::now();
 
     free_quad_tree(root);
 
-    free_tree_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(
+    free_tree_timing += std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::high_resolution_clock::now() - iteration_start).count()/NS_PER_MS;
   }
 
