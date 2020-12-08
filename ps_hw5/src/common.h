@@ -21,6 +21,9 @@ const static double MAX_Y = 4.0;
 #define TIMING_TEST 0
 #endif
 
+const static double MS_PER_S = 1000.0f;
+const static double NS_PER_MS = 1000.0f;
+
 #ifdef DEBUG
 #define DEBUG_TEST 1
 #else

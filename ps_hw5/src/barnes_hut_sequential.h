@@ -17,6 +17,4 @@ void update_force(struct particle *p,
 
 void update_velocity_position(particle *p, double d_t);
 
-void barnes_hut_sequential(const struct options_t *args,
-    int n_particles,
-    particle *particles);
+void barnes_hut_sequential(const struct options_t *args);

@@ -1,8 +1,10 @@
 #include "barnes_hut_sequential.h"
 
+#include <chrono>
 #include <cmath>
 #include <csignal>
 
+#include "io.h"
 #include "visualization.h"
 
 quad_tree *insert_particle_into_quad_tree(quad_tree *node, struct particle *particle,
@@ -154,14 +156,30 @@ void update_velocity_position(particle *p, double d_t) {
     p->v_y += p->a_y*d_t;
 }
 
-void barnes_hut_sequential(const struct options_t *args,
-    int n_particles,
-    struct particle *particles) {
+void barnes_hut_sequential(const struct options_t *args) {
+  // Start timer
+  auto start = std::chrono::high_resolution_clock::now();
+
+  int n_particles;
+  particle *particles;
+
+  read_file(args, &n_particles, &particles);
+
+  double build_tree_timing = 0.0f,
+         update_force_timing = 0.0f,
+         update_velocity_position_timing = 0.0f,
+         free_tree_timing = 0.0f;
 
   for (int i = 0; i < args->steps; i++) {
+    // Start timer
+    auto iteration_start = std::chrono::high_resolution_clock::now();
+
     DEBUG_PRINT(printf("Step %d\n", i));
 
     quad_tree *root = build_quad_tree(n_particles, particles);
+
+    build_tree_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::high_resolution_clock::now() - iteration_start).count()/NS_PER_MS;
 
     if (args->visualization) {
       bool quit = render_visualization(n_particles, particles, root);
@@ -171,6 +189,8 @@ void barnes_hut_sequential(const struct options_t *args,
       }
     }
 
+    iteration_start = std::chrono::high_resolution_clock::now();
+
     for (int i = 0; i < n_particles; i++) {
       particles[i].a_x = 0.0f;
       particles[i].a_y = 0.0f;
@@ -178,10 +198,38 @@ void barnes_hut_sequential(const struct options_t *args,
       update_force(particles + i, root, args->theta);
     }
 
+    update_force_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::high_resolution_clock::now() - iteration_start).count()/NS_PER_MS;
+
+    iteration_start = std::chrono::high_resolution_clock::now();
+
     for (int i = 0; i < n_particles; i++) {
       update_velocity_position(particles + i, args->delta);
     }
 
+    update_velocity_position_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::high_resolution_clock::now() - iteration_start).count()/NS_PER_MS;
+
+    iteration_start = std::chrono::high_resolution_clock::now();
+
     free_quad_tree(root);
+
+    free_tree_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::high_resolution_clock::now() - iteration_start).count()/NS_PER_MS;
   }
+
+  write_file(args, n_particles, particles);
+
+  TIMING_PRINT(printf("build_tree: %lf\n", (build_tree_timing/args->steps)));
+  TIMING_PRINT(printf("update_force: %lf\n", (update_force_timing/args->steps)));
+  TIMING_PRINT(printf("update_velocity_position: %lf\n", (update_velocity_position_timing/args->steps)));
+  TIMING_PRINT(printf("free_tree: %lf\n", (free_tree_timing/args->steps)));
+
+  // End timer
+  auto end = std::chrono::high_resolution_clock::now();
+  auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+  TIMING_PRINT(printf("overall per iteration: %lf\n", diff.count() / 1.0f / args->steps));
+  TIMING_PRINT(printf("overall per iteration/particle: %lf\n", diff.count() / 1.0f / n_particles / args->steps));
+  TIMING_PRINT(printf("overall: %lf\n", diff.count() / 1.0f));
+  std::cout << diff.count() / MS_PER_S << std::endl;
 }

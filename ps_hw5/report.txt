@@ -1,13 +1,31 @@
-Obs:
+# Intro
 
-Different approaches to the parallel algorithm. Interesting challenges in locality and load balancing
+Barnes Hut is an interesting challenge to parallelization. The algorithm speeds up force calculations
+asymptotically, from O(n*n) to O(n*log(n)), by approximating some of the calculations via cached
+cluster values. The data-structure at the core of it is not the kind of regular structure that leads
+itself to easy parallelization, thus spawning different approaches to the parallel algorithm.
+The main challenges in scaling the algorithms to supercomputers (1000s of nodes) is to
+maintain data locality and balance the load, without incurring too much coordination overhead.
 
-Scalable Parallel Formulations of the Barnes Hut Method for n - Body Simulations*
-costzone
-Grama
+# Plan of attack
 
-Warren - bit hash
-Singh - ORB/costzones/90 % force computation
+The Singh '95 paper provided as reference gives a great overview of multiple implementations
+of N-body algorithms. It estimated that around 90 % of the time is spent on force computation, which
+makes sense since it's both the most computationally heavy part of the algorithm, and also
+the asymptotical bottleneck, since it has to compare each particle with eithr other particles
+or groups of particles (depending on the theta).
+
+So my plan for implementation became: implement a sequential version of the algorithm to have
+a baseline, and then focus on parallelizing the force computation portion of it for the
+MPI implementation; after that, iterate on algorithm based on the data collected. Since the
+trial datasets we're using are small enough, I focused less on trying to distribute the data
+over the nodes, which would provide more of a speedup when the datasets are much larger, in
+addition to reducing local memory usage, at the cost of doing extra communication; that
+communication can indeed be batched, or done asynchronously, as specified in Grama '94.
+
+# The sequential build
+
+The sequential
 
 theta s/d ratio - do you have to account for own mass?
 no if \theta < 1/sqrt(2)
@@ -23,10 +41,24 @@ perf
 2.75%  nbody    nbody                   [.] free_quad_tree
 
 
-TODO implement
-TODO correctness
+implement MPI
+correctness
+
+extra setup/teardown
+TIMING: MPI Overall: 0.001365
+0.032
+
 TODO perf analysis
+  MPI breakdown
+  per particle stats
+  costzones
 
 next optimizations
 
  - parallelize tree building, reduce malloc
+
+Warren - bit hash
+
+# How much time did I spend?
+
+I spent
